@@ -404,7 +404,9 @@ const CARModal = ({ car, managers, onSave, onClose }) => {
         <div style={{ gridColumn:"1/-1" }}>
           <Textarea label="Description of Finding" rows={4} value={form.finding_description||""} onChange={e=>set("finding_description",e.target.value)} />
         </div>
-        <Input label="QMS Clause Reference" value={form.qms_clause||""} onChange={e=>set("qms_clause",e.target.value)} placeholder="e.g. Clause 8.7.1" />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="QMS Clause Reference" rows={4} value={form.qms_clause||""} onChange={e=>set("qms_clause",e.target.value)} placeholder="e.g. Clause 8.7.1 — Nonconforming outputs" />
+        </div>
         <Select label="Severity" value={form.severity||""} onChange={e=>set("severity",e.target.value)}>
           {["Minor","Major","Critical"].map(o=><option key={o}>{o}</option>)}
         </Select>
