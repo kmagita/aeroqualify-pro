@@ -789,126 +789,151 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     const W=210; const margin=14; const col=W-margin*2;
 
     // ── helpers ──
+    const LINE_H=4.5; // line height for 9pt text
+    const LABEL_SZ=6.5; const BODY_SZ=9;
+
     const sectionTitle=(text,y,color=[1,87,155])=>{
       doc.setFillColor(...color); doc.rect(margin,y,col,7,"F");
-      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(255,255,255);
-      doc.text(text,margin+3,y+5); doc.setTextColor(0,0,0);
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ+1); doc.setTextColor(255,255,255);
+      doc.text(text,margin+3,y+4.8); doc.setTextColor(0,0,0);
       return y+9;
     };
-    const labelVal=(label,value,x,y,w,h=8)=>{
-      doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
-      doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
-      doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
-      doc.text(label.toUpperCase(),x+2.5,y+3.5);
-      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+
+    // Draws a labelled box that auto-sizes to its content. Returns bottom y.
+    const box=(label,value,x,y,w)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
       const lines=doc.splitTextToSize(String(value||"—"),w-5);
-      doc.text(lines,x+2.5,y+6.5);
-      return y+(lines.length>1?h+(lines.length-1)*4:h);
-    };
-    const bigBox=(label,value,x,y,w)=>{
-      const lines=doc.splitTextToSize(String(value||"—"),w-6);
-      const h=Math.max(12,lines.length*4+8);
+      const textH=lines.length*LINE_H;
+      const h=5+4+textH+3; // top-pad + label + text + bottom-pad
       doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
       doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
-      doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
       doc.text(label.toUpperCase(),x+2.5,y+4);
-      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
-      doc.text(lines,x+2.5,y+8.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+      doc.text(lines,x+2.5,y+4+LINE_H+1);
       return y+h+2;
     };
+
+    // Draws a pair of equal-width boxes on the same row. Returns bottom y.
+    const boxRow=(pairs,x,y,totalW)=>{
+      const gap=2; const n=pairs.length; const w=(totalW-(n-1)*gap)/n;
+      // Calculate the max height needed across all boxes in this row
+      let maxH=0;
+      pairs.forEach(([,val])=>{
+        doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+        const lines=doc.splitTextToSize(String(val||"—"),w-5);
+        const h=5+4+lines.length*LINE_H+3;
+        if(h>maxH) maxH=h;
+      });
+      pairs.forEach(([label,val],i)=>{
+        const bx=x+i*(w+gap);
+        doc.setFillColor(245,248,252); doc.rect(bx,y,w,maxH,"F");
+        doc.setDrawColor(221,227,234); doc.rect(bx,y,w,maxH,"S");
+        doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+        doc.text(label.toUpperCase(),bx+2.5,y+4);
+        doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+        const lines=doc.splitTextToSize(String(val||"—"),w-5);
+        doc.text(lines,bx+2.5,y+4+LINE_H+1);
+      });
+      return y+maxH+2;
+    };
+
     const checkRow=(label,ok,x,y,w)=>{
-      doc.setFillColor(ok?232:245,ok?245:248,ok?233:252);
-      doc.rect(x,y,w,7,"F");
+      const bgR=ok?232:245; const bgG=ok?245:248; const bgB=ok?233:252;
+      doc.setFillColor(bgR,bgG,bgB); doc.rect(x,y,w,7,"F");
       doc.setDrawColor(221,227,234); doc.rect(x,y,w,7,"S");
+      // Use text marker instead of unicode to avoid encoding issues
       doc.setFont("helvetica","bold"); doc.setFontSize(9);
       doc.setTextColor(ok?46:180,ok?125:180,ok?50:180);
-      doc.text(ok?"✓":"○",x+3,y+5);
+      doc.text(ok?"[x]":"[ ]",x+2.5,y+5);
       doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
-      doc.text(label,x+9,y+5);
+      doc.text(label,x+14,y+5);
       return y+8;
     };
-    const pageH=297; let y=margin;
+
+    let y=margin;
 
     // ── Letterhead ──
     doc.setFillColor(1,87,155); doc.rect(0,0,W,18,"F");
-    doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.setTextColor(255,255,255);
-    doc.text("✈ AeroQualify Pro",margin,12);
+    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(255,255,255);
+    doc.text("AeroQualify Pro",margin,12);
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(200,220,255);
-    doc.text("CAPA PROGRESS REPORT",margin+58,12);
-    doc.setTextColor(200,220,255);
-    doc.text("Pegasus Flyers (E.A.) Ltd.  ·  Wilson Airport, Nairobi  ·  +254206001467/8",W-margin,9,{align:"right"});
-    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`,W-margin,14,{align:"right"});
+    doc.text("CAPA PROGRESS REPORT",margin+52,12);
+    doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi  |  +254206001467/8",W-margin,9,{align:"right"});
+    doc.text("Generated: "+new Date().toLocaleDateString("en-GB"),W-margin,14,{align:"right"});
     y=24;
 
-    // ── CAR Header ──
+    // ── CAR Header bar ──
     doc.setFillColor(0,60,113); doc.rect(margin,y,col,10,"F");
     doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
-    doc.text(`CAR: ${car.id}`,margin+4,y+7);
-    doc.setFontSize(9);
-    // status badge
+    doc.text("CAR: "+car.id,margin+4,y+7);
+    // status pill — right aligned, text only (avoid roundedRect encoding issues)
     const sc={Open:[198,40,40],"In Progress":[230,81,0],"Pending Verification":[69,39,160],Closed:[46,125,50],Overdue:[198,40,40]};
     const sCol=sc[car.status]||[95,114,133];
-    doc.setFillColor(...sCol); doc.roundedRect(W-margin-32,y+2,30,6,1,1,"F");
-    doc.setFontSize(7); doc.setTextColor(255,255,255);
-    doc.text(car.status,W-margin-32+15,y+6.2,{align:"center"});
+    doc.setFillColor(...sCol); doc.rect(W-margin-34,y+2,32,6,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
+    doc.text(car.status,W-margin-34+16,y+6.2,{align:"center"});
     y+=14;
 
     // ── Progress Tracker ──
+    doc.setFillColor(245,248,252); doc.rect(margin,y,col,16,"F");
+    doc.setDrawColor(221,227,234); doc.rect(margin,y,col,16,"S");
     const steps=[
-      {label:"CAR Raised",done:true},
-      {label:"In Progress",done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status)},
-      {label:"Pending Verification",done:["Pending Verification","Closed"].includes(car.status)},
-      {label:"Closed",done:car.status==="Closed"},
+      {label:"CAR RAISED",done:true},
+      {label:"IN PROGRESS",done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status)},
+      {label:"PENDING VERIFICATION",done:["Pending Verification","Closed"].includes(car.status)},
+      {label:"CLOSED",done:car.status==="Closed"},
     ];
-    doc.setFillColor(245,248,252); doc.rect(margin,y,col,14,"F");
-    doc.setDrawColor(221,227,234); doc.rect(margin,y,col,14,"S");
     const stepW=col/steps.length;
     steps.forEach((s,i)=>{
       const cx=margin+stepW*i+stepW/2; const cy=y+7;
-      // line between steps
+      // connector line (drawn before circle so circle overlaps)
       if(i<steps.length-1){
-        doc.setDrawColor(s.done?1:200,s.done?87:200,s.done?155:200);
         doc.setLineWidth(1.5);
+        doc.setDrawColor(s.done?1:210,s.done?87:210,s.done?155:210);
         doc.line(cx+5,cy,cx+stepW-5,cy);
       }
-      // circle
-      doc.setFillColor(s.done?1:238,s.done?87:242,s.done?155:247);
+      // filled circle
+      doc.setFillColor(s.done?1:220,s.done?87:230,s.done?155:240);
       doc.circle(cx,cy,4,"F");
-      doc.setDrawColor(s.done?1:221,s.done?87:227,s.done?155:234);
+      doc.setDrawColor(s.done?1:200,s.done?87:210,s.done?155:220);
       doc.setLineWidth(0.5); doc.circle(cx,cy,4,"S");
-      if(s.done){ doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255); doc.text("✓",cx,cy+2.2,{align:"center"}); }
-      doc.setFont("helvetica","normal"); doc.setFontSize(5.5); doc.setTextColor(s.done?1:140,s.done?87:150,s.done?155:160);
-      doc.text(s.label.toUpperCase(),cx,y+13.5,{align:"center"});
+      // marker inside circle — use text not unicode
+      doc.setFont("helvetica","bold"); doc.setFontSize(6);
+      doc.setTextColor(s.done?255:150,s.done?255:160,s.done?255:170);
+      doc.text(s.done?"OK":"--",cx,cy+2,{align:"center"});
+      // label below
+      doc.setFont("helvetica","bold"); doc.setFontSize(5.5);
+      doc.setTextColor(s.done?1:140,s.done?87:150,s.done?155:160);
+      doc.text(s.label,cx,y+15,{align:"center"});
     });
-    y+=18;
+    y+=20;
 
     // ── Section 1: CAR Details ──
     y=sectionTitle("SECTION 1 — CORRECTIVE ACTION REQUEST (CAR)",y);
-    y=bigBox("Description of Finding",car.finding_description,margin,y,col)+1;
-    y=bigBox("QMS Clause Reference",car.qms_clause,margin,y,col)+1;
-    const half=(col-2)/2;
-    const fields1=[["CAR Number",car.id],["Date Raised",fmt(car.date_raised)],["Severity",car.severity],["Status",car.status],["Department",car.department],["Due Date",fmt(car.due_date)],["Responsible Manager",car.responsible_manager],["Raised By",car.raised_by_name]];
-    for(let i=0;i<fields1.length;i+=2){
-      const lh=labelVal(fields1[i][0],fields1[i][1],margin,y,half);
-      if(fields1[i+1]) labelVal(fields1[i+1][0],fields1[i+1][1],margin+half+2,y,half);
-      y=Math.max(lh,y+10)+1;
-    }
+    y=box("Description of Finding",car.finding_description,margin,y,col);
+    y=box("QMS Clause Reference",car.qms_clause,margin,y,col);
+    y=boxRow([["CAR Number",car.id],["Date Raised",fmt(car.date_raised)]],margin,y,col);
+    y=boxRow([["Severity",car.severity],["Status",car.status]],margin,y,col);
+    y=boxRow([["Department",car.department],["Due Date",fmt(car.due_date)]],margin,y,col);
+    y=boxRow([["Responsible Manager",car.responsible_manager],["Raised By",car.raised_by_name]],margin,y,col);
     y+=4;
 
     // ── Section 2: CAP ──
     y=sectionTitle("SECTION 2 — CORRECTIVE ACTION PLAN (CAP)",y,[0,105,92]);
     if(cap){
-      y=bigBox("Immediate Corrective Action",cap.immediate_action,margin,y,col)+1;
-      y=bigBox("Root Cause Analysis",cap.root_cause_analysis,margin,y,col)+1;
-      y=bigBox("Corrective Action",cap.corrective_action,margin,y,col)+1;
-      y=bigBox("Preventive Action",cap.preventive_action,margin,y,col)+1;
-      // evidence
-      const evLabel="Evidence of Closure"; const evVal=cap.evidence_filename?`✓ ${cap.evidence_filename}`:"— No evidence uploaded";
-      y=bigBox(evLabel,evVal,margin,y,col)+1;
-      if(cap.evidence_url){ doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155); doc.textWithLink("View/Download Evidence File",margin+2.5,y-2,{url:cap.evidence_url}); doc.setTextColor(0,0,0); y+=2; }
-      y=labelVal("Submitted By",cap.submitted_by_name||"—",margin,y,half);
-      labelVal("Submitted At",cap.submitted_at?new Date(cap.submitted_at).toLocaleString():"—",margin+half+2,y-10,half);
-      y+=2;
+      y=box("Immediate Corrective Action",cap.immediate_action,margin,y,col);
+      y=box("Root Cause Analysis",cap.root_cause_analysis,margin,y,col);
+      y=box("Corrective Action",cap.corrective_action,margin,y,col);
+      y=box("Preventive Action",cap.preventive_action,margin,y,col);
+      const evVal=cap.evidence_filename?"[Attached] "+cap.evidence_filename:"— No evidence uploaded";
+      y=box("Evidence of Closure",evVal,margin,y,col);
+      if(cap.evidence_url){
+        doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155);
+        doc.textWithLink("View / Download Evidence File",margin+2.5,y-1,{url:cap.evidence_url});
+        doc.setTextColor(0,0,0); y+=3;
+      }
+      y=boxRow([["Submitted By",cap.submitted_by_name||"—"],["Submitted At",cap.submitted_at?new Date(cap.submitted_at).toLocaleString():"—"]],margin,y,col);
     } else {
       doc.setFillColor(255,243,224); doc.rect(margin,y,col,10,"F");
       doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(230,81,0);
@@ -917,8 +942,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     y+=4;
 
     // ── Section 3: Verification ──
-    // new page if not enough space
-    if(y>240){ doc.addPage(); y=20; }
+    if(y>230){ doc.addPage(); y=20; }
     y=sectionTitle("SECTION 3 — CAPA VERIFICATION",y,[69,39,160]);
     if(verif){
       const checks=[
@@ -931,13 +955,9 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       ];
       checks.forEach(([label,ok])=>{ y=checkRow(label,ok,margin,y,col); });
       y+=2;
-      y=labelVal("Effectiveness Rating",verif.effectiveness_rating||"—",margin,y,half);
-      labelVal("Final Status",verif.status||"—",margin+half+2,y-10,half);
-      y+=2;
-      y=labelVal("Verified By",verif.verified_by_name||"—",margin,y,half);
-      labelVal("Verified At",verif.verified_at?new Date(verif.verified_at).toLocaleString():"—",margin+half+2,y-10,half);
-      y+=2;
-      if(verif.verifier_comments) y=bigBox("Verifier Comments",verif.verifier_comments,margin,y,col)+1;
+      y=boxRow([["Effectiveness Rating",verif.effectiveness_rating||"—"],["Final Status",verif.status||"—"]],margin,y,col);
+      y=boxRow([["Verified By",verif.verified_by_name||"—"],["Verified At",verif.verified_at?new Date(verif.verified_at).toLocaleString():"—"]],margin,y,col);
+      if(verif.verifier_comments) y=box("Verifier Comments",verif.verifier_comments,margin,y,col);
     } else {
       doc.setFillColor(227,242,253); doc.rect(margin,y,col,10,"F");
       doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(1,87,155);
@@ -949,46 +969,33 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     if(y>245){ doc.addPage(); y=20; }
     y=sectionTitle("SIGNATURES",y,[26,35,50]);
     const sigW=(col-6)/2;
-    // Quality Manager signature box
-    doc.setFillColor(255,255,255); doc.rect(margin,y,sigW,32,"F");
-    doc.setDrawColor(221,227,234); doc.rect(margin,y,sigW,32,"S");
-    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(95,114,133);
-    doc.text("QUALITY MANAGER",margin+3,y+5);
     const qm=managers?.find(m=>m.role_title==="Quality Manager");
-    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
-    doc.text(qm?.person_name||"_________________________",margin+3,y+12);
-    doc.setDrawColor(180,190,200); doc.setLineWidth(0.4);
-    doc.line(margin+3,y+21,margin+sigW-6,y+21);
-    doc.setFontSize(7); doc.setTextColor(95,114,133);
-    doc.text("Signature",margin+3,y+25);
-    doc.line(margin+3,y+29,margin+sigW-6,y+29);
-    doc.text("Date",margin+3,y+32.5);
-    // Accountable Manager signature box
-    const ax=margin+sigW+6;
-    doc.setFillColor(255,255,255); doc.rect(ax,y,sigW,32,"F");
-    doc.setDrawColor(221,227,234); doc.rect(ax,y,sigW,32,"S");
-    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(95,114,133);
-    doc.text("ACCOUNTABLE MANAGER",ax+3,y+5);
     const am=managers?.find(m=>m.role_title==="Accountable Manager");
-    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
-    doc.text(am?.person_name||"_________________________",ax+3,y+12);
-    doc.setDrawColor(180,190,200); doc.setLineWidth(0.4);
-    doc.line(ax+3,y+21,ax+sigW-6,y+21);
-    doc.setFontSize(7); doc.setTextColor(95,114,133);
-    doc.text("Signature",ax+3,y+25);
-    doc.line(ax+3,y+29,ax+sigW-6,y+29);
-    doc.text("Date",ax+3,y+32.5);
-    y+=38;
+    [[margin,"QUALITY MANAGER",qm?.person_name],[margin+sigW+6,"ACCOUNTABLE MANAGER",am?.person_name]].forEach(([sx,role,name])=>{
+      doc.setFillColor(255,255,255); doc.rect(sx,y,sigW,34,"F");
+      doc.setDrawColor(221,227,234); doc.rect(sx,y,sigW,34,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text(role,sx+3,y+5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+      doc.text(name||"",sx+3,y+12);
+      doc.setDrawColor(180,190,200); doc.setLineWidth(0.3);
+      doc.line(sx+3,y+22,sx+sigW-4,y+22);
+      doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text("Signature",sx+3,y+26);
+      doc.line(sx+3,y+30,sx+sigW-4,y+30);
+      doc.text("Date",sx+3,y+33.5);
+    });
+    y+=40;
 
     // ── Footer on every page ──
     const pageCount=doc.getNumberOfPages();
     for(let p=1;p<=pageCount;p++){
       doc.setPage(p);
       doc.setFillColor(245,248,252); doc.rect(0,287,W,10,"F");
-      doc.setDrawColor(221,227,234); doc.line(0,287,W,287);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(0,287,W,287);
       doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(95,114,133);
-      doc.text("Pegasus Flyers (E.A.) Ltd.  ·  Confidential QMS Document  ·  AS9100D / ISO 9001:2015",margin,293);
-      doc.text(`Page ${p} of ${pageCount}`,W-margin,293,{align:"right"});
+      doc.text("Pegasus Flyers (E.A.) Ltd.  |  Confidential QMS Document  |  AS9100D / ISO 9001:2015",margin,293);
+      doc.text("Page "+p+" of "+pageCount,W-margin,293,{align:"right"});
     }
 
     doc.save(`CAPA-Report-${car.id}.pdf`);
