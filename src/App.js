@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, TABLES, logChange, sendNotification } from "./supabase";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import LOGO_B64 from "./logoB64";
 
 // ─── Global Styles ──────────────────────────────────────────
 const GlobalStyle = () => (
@@ -27,6 +28,9 @@ const GlobalStyle = () => (
       .btn-ghost:hover   { background: #e8edf3 !important; }
       .btn-success:hover { background: #2e7d32 !important; }
       .card { background: #fff; border-radius: 10px; border: 1px solid #dde3ea; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+      .tooltip-wrap { position: relative; cursor: pointer; }
+      .tooltip-wrap .tooltip-box { display:none; position:absolute; left:0; top:100%; z-index:500; background:#1a2332; color:#fff; font-size:12px; line-height:1.5; padding:10px 14px; border-radius:8px; min-width:260px; max-width:400px; white-space:pre-wrap; box-shadow:0 4px 20px rgba(0,0,0,0.2); margin-top:4px; }
+      .tooltip-wrap:hover .tooltip-box { display:block; animation:fadeIn 0.15s ease; }
     `}</style>
   </>
 );
@@ -529,6 +533,178 @@ const ModalShell = ({ title, children, onClose, wide }) => (
   </div>
 );
 
+
+// ─── Pegasus Letterhead ───────────────────────────────────────
+const PegasusLetterhead = () => (
+  <div style={{ borderBottom:`2px solid #01579b`, paddingBottom:14, marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+    <img src={LOGO_B64} alt="Pegasus Flyers" style={{ height:56, objectFit:"contain" }} />
+    <div style={{ textAlign:"right" }}>
+      <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:13, color:"#01579b" }}>CORRECTIVE ACTION REQUEST</div>
+      <div style={{ fontSize:10, color:"#5f7285", marginTop:2 }}>P.O Box 3341-00100 Wilson Airport, Nairobi Kenya</div>
+      <div style={{ fontSize:10, color:"#5f7285" }}>Tel: +254206001467/8 · Email: pegasus@africaonline.co.ke</div>
+    </div>
+  </div>
+);
+
+// ─── CAPA Detail / Progress Modal ────────────────────────────
+const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
+  const steps = [
+    { label:"CAR Raised",           done:true,                                  active:car.status==="Open" },
+    { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status), active:car.status==="In Progress" },
+    { label:"Pending Verification", done:["Pending Verification","Closed"].includes(car.status), active:car.status==="Pending Verification" },
+    { label:"Closed",               done:car.status==="Closed",                 active:car.status==="Closed" },
+  ];
+  const checkItem = (ok, label) => (
+    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+      <div style={{ width:18,height:18,borderRadius:"50%",background:ok?"#e8f5e9":"#fff",border:`2px solid ${ok?"#2e7d32":"#dde3ea"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+        {ok&&<span style={{ color:"#2e7d32",fontSize:10,fontWeight:700 }}>✓</span>}
+      </div>
+      <span style={{ fontSize:12,color:ok?"#2e7d32":"#8fa0b0" }}>{label}</span>
+    </div>
+  );
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:"#fff",borderRadius:14,width:780,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 8px 50px rgba(0,0,0,0.2)",animation:"fadeIn 0.2s ease" }} onClick={e=>e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ background:`linear-gradient(135deg,#01579b,#0277bd)`,padding:"18px 24px",borderRadius:"14px 14px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontFamily:"'Source Code Pro',monospace",color:"rgba(255,255,255,0.7)",fontSize:11 }}>CAPA PROGRESS REPORT</div>
+            <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:20,color:"#fff",letterSpacing:0.5 }}>{car.id}</div>
+          </div>
+          <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+            <Btn size="sm" onClick={onPDF} style={{ background:"rgba(255,255,255,0.15)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)" }}>📄 Export PDF</Btn>
+            <button onClick={onClose} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer" }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ padding:24 }}>
+          {/* Letterhead */}
+          <PegasusLetterhead />
+
+          {/* Progress tracker */}
+          <div style={{ display:"flex",alignItems:"center",marginBottom:24,background:"#f5f8fc",borderRadius:10,padding:"14px 20px" }}>
+            {steps.map((s,i)=>(
+              <div key={s.label} style={{ display:"flex",alignItems:"center",flex:i<steps.length-1?1:"auto" }}>
+                <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4 }}>
+                  <div style={{ width:32,height:32,borderRadius:"50%",background:s.done?"#01579b":s.active?"#e3f2fd":"#eef2f7",border:`2px solid ${s.done?"#01579b":s.active?"#01579b":"#dde3ea"}`,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.3s" }}>
+                    {s.done ? <span style={{ color:"#fff",fontSize:14,fontWeight:700 }}>✓</span> : <span style={{ width:8,height:8,borderRadius:"50%",background:s.active?"#01579b":"#dde3ea",display:"block" }}/>}
+                  </div>
+                  <div style={{ fontSize:10,fontWeight:600,color:s.done?"#01579b":T.muted,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+                </div>
+                {i<steps.length-1&&<div style={{ flex:1,height:2,background:s.done?"#01579b":"#dde3ea",margin:"0 8px",marginBottom:18,transition:"background 0.3s" }}/>}
+              </div>
+            ))}
+          </div>
+
+          {/* CAR Details */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
+            <div style={{ background:"#f5f8fc",borderRadius:10,padding:16,gridColumn:"1/-1" }}>
+              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>Description of Finding</div>
+              <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{car.finding_description||"—"}</div>
+            </div>
+            <div style={{ background:"#f5f8fc",borderRadius:10,padding:16,gridColumn:"1/-1" }}>
+              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>QMS Clause Reference</div>
+              <div style={{ fontSize:13,color:T.text,lineHeight:1.6,fontFamily:"'Source Code Pro',monospace" }}>{car.qms_clause||"—"}</div>
+            </div>
+            {[
+              ["CAR Number",car.id,true],["Date Raised",fmt(car.date_raised),false],
+              ["Severity",null,false,car.severity],["Status",null,false,car.status],
+              ["Department",car.department,false],["Due Date",fmt(car.due_date),false],
+              ["Responsible Manager",car.responsible_manager,false],["Raised By",car.raised_by_name,false],
+            ].map(([label,val,mono,badge])=>(
+              <div key={label} style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 14px" }}>
+                <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:4 }}>{label}</div>
+                {badge ? <Badge label={badge}/> : <div style={{ fontSize:13,color:T.text,fontFamily:mono?"'Source Code Pro',monospace":"inherit",fontWeight:mono?600:400 }}>{val||"—"}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* CAP Section */}
+          <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18,marginBottom:18 }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14 }}>
+              <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk }}>Corrective Action Plan (CAP)</div>
+              <Badge label={cap?"Submitted":"Not Submitted"}/>
+            </div>
+            {cap ? (
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                {[
+                  ["Immediate Corrective Action",cap.immediate_action,true],
+                  ["Root Cause Analysis",cap.root_cause_analysis,true],
+                  ["Corrective Action",cap.corrective_action,true],
+                  ["Preventive Action",cap.preventive_action,true],
+                ].map(([label,val,full])=>(
+                  <div key={label} style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:full?"1/-1":"auto" }}>
+                    <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>{label}</div>
+                    <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{val||"—"}</div>
+                  </div>
+                ))}
+                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Evidence of Closure</div>
+                  {cap.evidence_filename
+                    ? <div style={{ fontSize:13,color:T.green,fontWeight:600 }}>✓ {cap.evidence_filename}</div>
+                    : <div style={{ fontSize:13,color:T.muted }}>— No evidence uploaded</div>}
+                </div>
+                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Submitted By</div>
+                  <div style={{ fontSize:13,color:T.text }}>{cap.submitted_by_name||"—"}</div>
+                  <div style={{ fontSize:11,color:T.muted }}>{cap.submitted_at?new Date(cap.submitted_at).toLocaleString():""}</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ background:"#fff3e0",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.yellow }}>⏳ CAP not yet submitted by the responsible manager.</div>
+            )}
+          </div>
+
+          {/* Verification Section */}
+          <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18 }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14 }}>
+              <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk }}>CAPA Verification</div>
+              <Badge label={verif?verif.status:"Not Verified"}/>
+            </div>
+            {verif ? (
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:"1/-1" }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:10 }}>Verification Checklist</div>
+                  {checkItem(verif.immediate_action_ok,"Immediate action was adequate")}
+                  {checkItem(verif.root_cause_ok,"Root cause correctly identified")}
+                  {checkItem(verif.corrective_action_ok,"Corrective action addresses root cause")}
+                  {checkItem(verif.preventive_action_ok,"Preventive action prevents recurrence")}
+                  {checkItem(verif.evidence_ok,"Evidence of closure satisfactory")}
+                  {checkItem(verif.recurrence_prevented,"Recurrence of finding prevented")}
+                </div>
+                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Effectiveness Rating</div>
+                  <Badge label={verif.effectiveness_rating}/>
+                </div>
+                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Verified By</div>
+                  <div style={{ fontSize:13,color:T.text }}>{verif.verified_by_name||"—"}</div>
+                  <div style={{ fontSize:11,color:T.muted }}>{verif.verified_at?new Date(verif.verified_at).toLocaleString():""}</div>
+                </div>
+                {verif.verifier_comments&&(
+                  <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:"1/-1" }}>
+                    <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Verifier Comments</div>
+                    <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{verif.verifier_comments}</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ background:"#e3f2fd",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.primary }}>⏳ Verification not yet completed by the Quality Manager.</div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div style={{ marginTop:20,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <div style={{ fontSize:11,color:T.muted }}>Pegasus Flyers (E.A.) Ltd. · QMS Document · {new Date().toLocaleDateString("en-GB")}</div>
+            <Btn size="sm" onClick={onPDF}>📄 Export PDF Report</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 // ─── CARs Table View ──────────────────────────────────────────
 const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
   const [modal, setModal]   = useState(null); // null | 'car' | 'cap' | 'verify'
@@ -607,8 +783,18 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     const{jsPDF}=await import("jspdf");
     const{default:autoTable}=await import("jspdf-autotable");
     const doc=new jsPDF(); const cap=getCAP(car.id); const verif=getVerif(car.id);
-    doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.text("CAPA Report",14,20);
-    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.text(`Generated: ${new Date().toLocaleDateString()}`,14,28);
+    // Pegasus letterhead
+    try {
+      const img=new Image(); img.src=LOGO_B64;
+      doc.addImage(LOGO_B64,"PNG",14,8,60,18);
+    } catch(e){}
+    doc.setDrawColor(1,87,155); doc.setLineWidth(0.8); doc.line(14,30,196,30);
+    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(1,87,155);
+    doc.text("CORRECTIVE ACTION REQUEST — CAPA REPORT",14,38);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text("Pegasus Flyers (E.A.) Ltd. · P.O Box 3341-00100 Wilson Airport, Nairobi Kenya · Tel: +254206001467/8",14,44);
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`,160,44);
+    doc.setTextColor(0,0,0);
     autoTable(doc,{startY:35,head:[["Field","Details"]],body:[
       ["CAR Number",car.id],["Status",car.status],["Severity",car.severity],
       ["Date Raised",fmt(car.date_raised)],["Due Date",fmt(car.due_date)],
@@ -648,9 +834,14 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     const{jsPDF}=await import("jspdf");
     const{default:autoTable}=await import("jspdf-autotable");
     const doc=new jsPDF("landscape");
-    doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("CAPA Status Report",14,18);
-    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.text(`Generated: ${new Date().toLocaleDateString()}  |  Total CARs: ${data.cars.length}`,14,26);
-    autoTable(doc,{startY:32,head:[["CAR #","Finding","Clause","Severity","Status","Raised","Due","Resp. Manager"]],
+    try { doc.addImage(LOGO_B64,"PNG",14,8,60,18); } catch(e){}
+    doc.setDrawColor(1,87,155); doc.setLineWidth(0.8); doc.line(14,30,270,30);
+    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(1,87,155);
+    doc.text("CAPA STATUS REPORT",14,38);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text("Pegasus Flyers (E.A.) Ltd. · "+`Generated: ${new Date().toLocaleDateString("en-GB")}  |  Total CARs: ${data.cars.length}`,14,44);
+    doc.setTextColor(0,0,0);
+    autoTable(doc,{startY:50,head:[["CAR #","Finding","Clause","Severity","Status","Raised","Due","Resp. Manager"]],
       body:data.cars.map(c=>[c.id,c.finding_description?.slice(0,40)||"—",c.qms_clause||"—",c.severity,c.status,fmt(c.date_raised),fmt(c.due_date),c.responsible_manager||"—"]),
       styles:{fontSize:9},headStyles:{fillColor:[1,87,155]},
       alternateRowStyles:{fillColor:[245,248,252]},
@@ -701,8 +892,18 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
                 return (
                   <tr key={c.id} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od&&c.status!=="Closed"?"#fff8f8":"" }}>
                     <td style={{ padding:"10px 14px", fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{c.id}</td>
-                    <td style={{ padding:"10px 14px", maxWidth:200 }}><div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.text }}>{c.finding_description}</div></td>
-                    <td style={{ padding:"10px 14px", fontFamily:"'Source Code Pro',monospace", fontSize:11, color:T.muted }}>{c.qms_clause||"—"}</td>
+                    <td style={{ padding:"10px 14px", maxWidth:220 }}>
+                      <div className="tooltip-wrap">
+                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.text, maxWidth:210 }}>{c.finding_description}</div>
+                        <div className="tooltip-box"><strong style={{color:"#90caf9"}}>Finding:</strong><br/>{c.finding_description}</div>
+                      </div>
+                    </td>
+                    <td style={{ padding:"10px 14px", maxWidth:160 }}>
+                      <div className="tooltip-wrap">
+                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'Source Code Pro',monospace", fontSize:11, color:T.muted, maxWidth:150 }}>{c.qms_clause||"—"}</div>
+                        {c.qms_clause&&<div className="tooltip-box"><strong style={{color:"#90caf9"}}>QMS Clause:</strong><br/>{c.qms_clause}</div>}
+                      </div>
+                    </td>
                     <td style={{ padding:"10px 14px" }}><Badge label={c.severity}/></td>
                     <td style={{ padding:"10px 14px" }}><Badge label={c.status}/></td>
                     <td style={{ padding:"10px 14px", color:T.muted, fontSize:12 }}>{c.department||"—"}</td>
@@ -711,6 +912,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
                     <td style={{ padding:"10px 14px" }}>
                       <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                         {canRaiseCAR&&<Btn size="sm" variant="ghost" onClick={()=>{setSelected(c);setModal("car")}}>Edit</Btn>}
+                        <Btn size="sm" variant="outline" onClick={()=>{setSelected(c);setModal("detail")}} style={{color:T.teal,borderColor:T.teal}}>View</Btn>
                         {c.status!=="Closed"&&<Btn size="sm" variant="outline" onClick={()=>{setSelected(c);setModal("cap")}}>CAP</Btn>}
                         {c.status==="Pending Verification"&&["admin","quality_manager"].includes(profile?.role)&&
                           <Btn size="sm" variant="success" onClick={()=>{setSelected(c);setModal("verify")}}>Verify</Btn>}
@@ -727,6 +929,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       {modal==="car"&&<CARModal car={selected} managers={managers} onSave={saveCar} onClose={()=>setModal(null)} />}
       {modal==="cap"&&selected&&<CAPModal car={selected} cap={getCAP(selected.id)} onSave={saveCap} onClose={()=>setModal(null)} />}
       {modal==="verify"&&selected&&<VerificationModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} onSave={saveVerification} onClose={()=>setModal(null)} />}
+      {modal==="detail"&&selected&&<CAPADetailModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} onPDF={()=>generateReport(selected)} onClose={()=>setModal(null)} />}
     </div>
   );
 };
