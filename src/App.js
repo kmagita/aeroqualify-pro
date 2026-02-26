@@ -465,7 +465,7 @@ const CAPModal = ({ car, cap, onSave, onClose }) => {
 
 // ─── Verification Form Modal ──────────────────────────────────
 const VerificationModal = ({ car, cap, verif, onSave, onClose }) => {
-  const [form, setForm] = useState(verif || {
+  const [form, setForm] = useState(verif ? {...verif} : {
     id:`VRF-${String(Date.now()).slice(-6)}`, car_id:car?.id,
     immediate_action_ok:false, root_cause_ok:false,
     corrective_action_ok:false, preventive_action_ok:false,
@@ -640,7 +640,10 @@ const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
                 <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
                   <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Evidence of Closure</div>
                   {cap.evidence_filename
-                    ? <div style={{ fontSize:13,color:T.green,fontWeight:600 }}>✓ {cap.evidence_filename}</div>
+                    ? <div>
+                        <div style={{ fontSize:13,color:T.green,fontWeight:600 }}>✓ {cap.evidence_filename}</div>
+                        {cap.evidence_url && <a href={cap.evidence_url} target="_blank" rel="noreferrer" style={{ fontSize:12,color:T.primary,display:"block",marginTop:4 }}>🔗 View / Download File</a>}
+                      </div>
                     : <div style={{ fontSize:13,color:T.muted }}>— No evidence uploaded</div>}
                 </div>
                 <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
@@ -781,46 +784,213 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
   const generateReport = async(car) => {
     const{jsPDF}=await import("jspdf");
     const{default:autoTable}=await import("jspdf-autotable");
-    const doc=new jsPDF(); const cap=getCAP(car.id); const verif=getVerif(car.id);
-    // Pegasus letterhead (logo omitted in PDF — add manually if needed)
-    doc.setDrawColor(1,87,155); doc.setLineWidth(0.8); doc.line(14,30,196,30);
-    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(1,87,155);
-    doc.text("CORRECTIVE ACTION REQUEST — CAPA REPORT",14,38);
-    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,100,100);
-    doc.text("Pegasus Flyers (E.A.) Ltd. · P.O Box 3341-00100 Wilson Airport, Nairobi Kenya · Tel: +254206001467/8",14,44);
-    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`,160,44);
-    doc.setTextColor(0,0,0);
-    autoTable(doc,{startY:35,head:[["Field","Details"]],body:[
-      ["CAR Number",car.id],["Status",car.status],["Severity",car.severity],
-      ["Date Raised",fmt(car.date_raised)],["Due Date",fmt(car.due_date)],
-      ["QMS Clause",car.qms_clause||"—"],["Department",car.department||"—"],
-      ["Responsible Manager",car.responsible_manager||"—"],
-      ["Finding",car.finding_description||"—"],
-    ],styles:{fontSize:10},headStyles:{fillColor:[1,87,155]}});
+    const cap=getCAP(car.id); const verif=getVerif(car.id);
+    const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const W=210; const margin=14; const col=W-margin*2;
+
+    // ── helpers ──
+    const sectionTitle=(text,y,color=[1,87,155])=>{
+      doc.setFillColor(...color); doc.rect(margin,y,col,7,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(255,255,255);
+      doc.text(text,margin+3,y+5); doc.setTextColor(0,0,0);
+      return y+9;
+    };
+    const labelVal=(label,value,x,y,w,h=8)=>{
+      doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
+      doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+      doc.text(label.toUpperCase(),x+2.5,y+3.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+      const lines=doc.splitTextToSize(String(value||"—"),w-5);
+      doc.text(lines,x+2.5,y+6.5);
+      return y+(lines.length>1?h+(lines.length-1)*4:h);
+    };
+    const bigBox=(label,value,x,y,w)=>{
+      const lines=doc.splitTextToSize(String(value||"—"),w-6);
+      const h=Math.max(12,lines.length*4+8);
+      doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
+      doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+      doc.text(label.toUpperCase(),x+2.5,y+4);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+      doc.text(lines,x+2.5,y+8.5);
+      return y+h+2;
+    };
+    const checkRow=(label,ok,x,y,w)=>{
+      doc.setFillColor(ok?232:245,ok?245:248,ok?233:252);
+      doc.rect(x,y,w,7,"F");
+      doc.setDrawColor(221,227,234); doc.rect(x,y,w,7,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.setTextColor(ok?46:180,ok?125:180,ok?50:180);
+      doc.text(ok?"✓":"○",x+3,y+5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
+      doc.text(label,x+9,y+5);
+      return y+8;
+    };
+    const pageH=297; let y=margin;
+
+    // ── Letterhead ──
+    doc.setFillColor(1,87,155); doc.rect(0,0,W,18,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.setTextColor(255,255,255);
+    doc.text("✈ AeroQualify Pro",margin,12);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(200,220,255);
+    doc.text("CAPA PROGRESS REPORT",margin+58,12);
+    doc.setTextColor(200,220,255);
+    doc.text("Pegasus Flyers (E.A.) Ltd.  ·  Wilson Airport, Nairobi  ·  +254206001467/8",W-margin,9,{align:"right"});
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`,W-margin,14,{align:"right"});
+    y=24;
+
+    // ── CAR Header ──
+    doc.setFillColor(0,60,113); doc.rect(margin,y,col,10,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+    doc.text(`CAR: ${car.id}`,margin+4,y+7);
+    doc.setFontSize(9);
+    // status badge
+    const sc={Open:[198,40,40],"In Progress":[230,81,0],"Pending Verification":[69,39,160],Closed:[46,125,50],Overdue:[198,40,40]};
+    const sCol=sc[car.status]||[95,114,133];
+    doc.setFillColor(...sCol); doc.roundedRect(W-margin-32,y+2,30,6,1,1,"F");
+    doc.setFontSize(7); doc.setTextColor(255,255,255);
+    doc.text(car.status,W-margin-32+15,y+6.2,{align:"center"});
+    y+=14;
+
+    // ── Progress Tracker ──
+    const steps=[
+      {label:"CAR Raised",done:true},
+      {label:"In Progress",done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status)},
+      {label:"Pending Verification",done:["Pending Verification","Closed"].includes(car.status)},
+      {label:"Closed",done:car.status==="Closed"},
+    ];
+    doc.setFillColor(245,248,252); doc.rect(margin,y,col,14,"F");
+    doc.setDrawColor(221,227,234); doc.rect(margin,y,col,14,"S");
+    const stepW=col/steps.length;
+    steps.forEach((s,i)=>{
+      const cx=margin+stepW*i+stepW/2; const cy=y+7;
+      // line between steps
+      if(i<steps.length-1){
+        doc.setDrawColor(s.done?1:200,s.done?87:200,s.done?155:200);
+        doc.setLineWidth(1.5);
+        doc.line(cx+5,cy,cx+stepW-5,cy);
+      }
+      // circle
+      doc.setFillColor(s.done?1:238,s.done?87:242,s.done?155:247);
+      doc.circle(cx,cy,4,"F");
+      doc.setDrawColor(s.done?1:221,s.done?87:227,s.done?155:234);
+      doc.setLineWidth(0.5); doc.circle(cx,cy,4,"S");
+      if(s.done){ doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255); doc.text("✓",cx,cy+2.2,{align:"center"}); }
+      doc.setFont("helvetica","normal"); doc.setFontSize(5.5); doc.setTextColor(s.done?1:140,s.done?87:150,s.done?155:160);
+      doc.text(s.label.toUpperCase(),cx,y+13.5,{align:"center"});
+    });
+    y+=18;
+
+    // ── Section 1: CAR Details ──
+    y=sectionTitle("SECTION 1 — CORRECTIVE ACTION REQUEST (CAR)",y);
+    y=bigBox("Description of Finding",car.finding_description,margin,y,col)+1;
+    y=bigBox("QMS Clause Reference",car.qms_clause,margin,y,col)+1;
+    const half=(col-2)/2;
+    const fields1=[["CAR Number",car.id],["Date Raised",fmt(car.date_raised)],["Severity",car.severity],["Status",car.status],["Department",car.department],["Due Date",fmt(car.due_date)],["Responsible Manager",car.responsible_manager],["Raised By",car.raised_by_name]];
+    for(let i=0;i<fields1.length;i+=2){
+      const lh=labelVal(fields1[i][0],fields1[i][1],margin,y,half);
+      if(fields1[i+1]) labelVal(fields1[i+1][0],fields1[i+1][1],margin+half+2,y,half);
+      y=Math.max(lh,y+10)+1;
+    }
+    y+=4;
+
+    // ── Section 2: CAP ──
+    y=sectionTitle("SECTION 2 — CORRECTIVE ACTION PLAN (CAP)",y,[0,105,92]);
     if(cap){
-      const y=doc.lastAutoTable.finalY+8;
-      doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.text("Corrective Action Plan",14,y);
-      autoTable(doc,{startY:y+5,head:[["Field","Details"]],body:[
-        ["Immediate Action",cap.immediate_action||"—"],
-        ["Root Cause",cap.root_cause_analysis||"—"],
-        ["Corrective Action",cap.corrective_action||"—"],
-        ["Preventive Action",cap.preventive_action||"—"],
-        ["Evidence",cap.evidence_filename||"—"],
-      ],styles:{fontSize:10},headStyles:{fillColor:[1,87,155]}});
+      y=bigBox("Immediate Corrective Action",cap.immediate_action,margin,y,col)+1;
+      y=bigBox("Root Cause Analysis",cap.root_cause_analysis,margin,y,col)+1;
+      y=bigBox("Corrective Action",cap.corrective_action,margin,y,col)+1;
+      y=bigBox("Preventive Action",cap.preventive_action,margin,y,col)+1;
+      // evidence
+      const evLabel="Evidence of Closure"; const evVal=cap.evidence_filename?`✓ ${cap.evidence_filename}`:"— No evidence uploaded";
+      y=bigBox(evLabel,evVal,margin,y,col)+1;
+      if(cap.evidence_url){ doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155); doc.textWithLink("View/Download Evidence File",margin+2.5,y-2,{url:cap.evidence_url}); doc.setTextColor(0,0,0); y+=2; }
+      y=labelVal("Submitted By",cap.submitted_by_name||"—",margin,y,half);
+      labelVal("Submitted At",cap.submitted_at?new Date(cap.submitted_at).toLocaleString():"—",margin+half+2,y-10,half);
+      y+=2;
+    } else {
+      doc.setFillColor(255,243,224); doc.rect(margin,y,col,10,"F");
+      doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(230,81,0);
+      doc.text("CAP not yet submitted by the responsible manager.",margin+4,y+6.5); y+=12;
     }
+    y+=4;
+
+    // ── Section 3: Verification ──
+    // new page if not enough space
+    if(y>240){ doc.addPage(); y=20; }
+    y=sectionTitle("SECTION 3 — CAPA VERIFICATION",y,[69,39,160]);
     if(verif){
-      const y=doc.lastAutoTable.finalY+8;
-      doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.text("Verification",14,y);
-      autoTable(doc,{startY:y+5,head:[["Check","Result"]],body:[
-        ["Immediate Action","    "+(verif.immediate_action_ok?"✓ Yes":"✗ No")],
-        ["Root Cause","    "+(verif.root_cause_ok?"✓ Yes":"✗ No")],
-        ["Corrective Action","    "+(verif.corrective_action_ok?"✓ Yes":"✗ No")],
-        ["Preventive Action","    "+(verif.preventive_action_ok?"✓ Yes":"✗ No")],
-        ["Evidence","    "+(verif.evidence_ok?"✓ Yes":"✗ No")],
-        ["Effectiveness",verif.effectiveness_rating||"—"],
-        ["Comments",verif.verifier_comments||"—"],
-      ],styles:{fontSize:10},headStyles:{fillColor:[46,125,50]}});
+      const checks=[
+        ["Immediate action was adequate and implemented",verif.immediate_action_ok],
+        ["Root cause has been correctly identified",verif.root_cause_ok],
+        ["Corrective action addresses the root cause",verif.corrective_action_ok],
+        ["Preventive action prevents recurrence",verif.preventive_action_ok],
+        ["Evidence of closure is satisfactory",verif.evidence_ok],
+        ["Recurrence of the finding is prevented",verif.recurrence_prevented],
+      ];
+      checks.forEach(([label,ok])=>{ y=checkRow(label,ok,margin,y,col); });
+      y+=2;
+      y=labelVal("Effectiveness Rating",verif.effectiveness_rating||"—",margin,y,half);
+      labelVal("Final Status",verif.status||"—",margin+half+2,y-10,half);
+      y+=2;
+      y=labelVal("Verified By",verif.verified_by_name||"—",margin,y,half);
+      labelVal("Verified At",verif.verified_at?new Date(verif.verified_at).toLocaleString():"—",margin+half+2,y-10,half);
+      y+=2;
+      if(verif.verifier_comments) y=bigBox("Verifier Comments",verif.verifier_comments,margin,y,col)+1;
+    } else {
+      doc.setFillColor(227,242,253); doc.rect(margin,y,col,10,"F");
+      doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(1,87,155);
+      doc.text("Verification not yet completed by the Quality Manager.",margin+4,y+6.5); y+=12;
     }
+    y+=8;
+
+    // ── Signature Section ──
+    if(y>245){ doc.addPage(); y=20; }
+    y=sectionTitle("SIGNATURES",y,[26,35,50]);
+    const sigW=(col-6)/2;
+    // Quality Manager signature box
+    doc.setFillColor(255,255,255); doc.rect(margin,y,sigW,32,"F");
+    doc.setDrawColor(221,227,234); doc.rect(margin,y,sigW,32,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(95,114,133);
+    doc.text("QUALITY MANAGER",margin+3,y+5);
+    const qm=managers?.find(m=>m.role_title==="Quality Manager");
+    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
+    doc.text(qm?.person_name||"_________________________",margin+3,y+12);
+    doc.setDrawColor(180,190,200); doc.setLineWidth(0.4);
+    doc.line(margin+3,y+21,margin+sigW-6,y+21);
+    doc.setFontSize(7); doc.setTextColor(95,114,133);
+    doc.text("Signature",margin+3,y+25);
+    doc.line(margin+3,y+29,margin+sigW-6,y+29);
+    doc.text("Date",margin+3,y+32.5);
+    // Accountable Manager signature box
+    const ax=margin+sigW+6;
+    doc.setFillColor(255,255,255); doc.rect(ax,y,sigW,32,"F");
+    doc.setDrawColor(221,227,234); doc.rect(ax,y,sigW,32,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(95,114,133);
+    doc.text("ACCOUNTABLE MANAGER",ax+3,y+5);
+    const am=managers?.find(m=>m.role_title==="Accountable Manager");
+    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
+    doc.text(am?.person_name||"_________________________",ax+3,y+12);
+    doc.setDrawColor(180,190,200); doc.setLineWidth(0.4);
+    doc.line(ax+3,y+21,ax+sigW-6,y+21);
+    doc.setFontSize(7); doc.setTextColor(95,114,133);
+    doc.text("Signature",ax+3,y+25);
+    doc.line(ax+3,y+29,ax+sigW-6,y+29);
+    doc.text("Date",ax+3,y+32.5);
+    y+=38;
+
+    // ── Footer on every page ──
+    const pageCount=doc.getNumberOfPages();
+    for(let p=1;p<=pageCount;p++){
+      doc.setPage(p);
+      doc.setFillColor(245,248,252); doc.rect(0,287,W,10,"F");
+      doc.setDrawColor(221,227,234); doc.line(0,287,W,287);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(95,114,133);
+      doc.text("Pegasus Flyers (E.A.) Ltd.  ·  Confidential QMS Document  ·  AS9100D / ISO 9001:2015",margin,293);
+      doc.text(`Page ${p} of ${pageCount}`,W-margin,293,{align:"right"});
+    }
+
     doc.save(`CAPA-Report-${car.id}.pdf`);
     showToast("PDF report generated","success");
   };
