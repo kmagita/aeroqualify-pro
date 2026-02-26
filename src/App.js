@@ -1150,7 +1150,7 @@ const DOC_FIELDS = [
 ];
 const FLIGHT_DOC_FIELDS = [
   {key:"id",label:"Document ID"},{key:"title",label:"Title",full:true},
-  {key:"doc_type",label:"Type",type:"select",options:["Air Operator Certificate","Flight Training Unit Approval","Aircraft Registration","Certificate of Airworthiness","Radio License","Insurance Certificate","Aerodrome Approval","Air Traffic Service Agreement","Dangerous Goods Approval","Other Approval","Other Certificate"]},
+  {key:"doc_type",label:"Type",type:"select",options:["Air Operator Certificate","Approved Training Organisation","Aircraft Registration","Certificate of Airworthiness","Radio License","Insurance Certificate","Aerodrome Approval","Air Traffic Service Agreement","Dangerous Goods Approval","Other Approval","Other Certificate"]},
   {key:"issuing_body",label:"Issuing Authority"},{key:"issue_date",label:"Issue Date",type:"date"},
   {key:"expiry_date",label:"Expiry Date",type:"date"},
   {key:"status",label:"Status",type:"select",options:["Valid","Expired","Pending Renewal","Suspended"]},
