@@ -1,0 +1,23 @@
+{
+  "name": "aeroqualify-pro",
+  "version": "3.0.0",
+  "description": "AeroQualify Pro – Aviation QMS",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "@supabase/supabase-js": "^2.39.0",
+    "recharts": "^2.10.0",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.1"
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version"]
+  }
+}
