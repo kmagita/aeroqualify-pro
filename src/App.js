@@ -1016,7 +1016,97 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     });
     y+=40;
 
-    // ── Footer on every page ──
+    // ── Attach evidence file as final page(s) ──
+    if(cap?.evidence_url && cap?.evidence_filename){
+      try {
+        const ext=(cap.evidence_filename.split(".").pop()||"").toLowerCase();
+        const isImage=["jpg","jpeg","png","gif","webp"].includes(ext);
+        const isPDF=ext==="pdf";
+        const resp=await fetch(cap.evidence_url);
+        if(resp.ok){
+          if(isImage){
+            const blob=await resp.blob();
+            const dataUrl=await new Promise(res=>{
+              const reader=new FileReader();
+              reader.onload=e=>res(e.target.result);
+              reader.readAsDataURL(blob);
+            });
+            doc.addPage();
+            doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+            doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+            doc.text("EVIDENCE OF CLOSURE",margin,12);
+            doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(200,210,220);
+            doc.text(cap.evidence_filename,W-margin,12,{align:"right"});
+            const imgProps=doc.getImageProperties(dataUrl);
+            const maxW=W-margin*2; const maxH=255;
+            let iw=imgProps.width; let ih=imgProps.height;
+            const scale=Math.min(maxW/iw,maxH/ih,1);
+            iw=iw*scale; ih=ih*scale;
+            const ix=margin+(maxW-iw)/2;
+            doc.addImage(dataUrl,ext==="png"?"PNG":"JPEG",ix,22,iw,ih);
+          } else if(isPDF){
+            // PDF evidence — try pdf-lib merge
+            try {
+              const {PDFDocument}=await import("pdf-lib");
+              const mainBytes=doc.output("arraybuffer");
+              const mainPdf=await PDFDocument.load(mainBytes);
+              const evBytes=await resp.arrayBuffer();
+              const evPdf=await PDFDocument.load(evBytes);
+              const pageCount=evPdf.getPageCount();
+              // Add a divider page
+              const {rgb,StandardFonts}=await import("pdf-lib");
+              const divPage=mainPdf.addPage([595,842]);
+              const font=await mainPdf.embedFont(StandardFonts.HelveticaBold);
+              divPage.drawRectangle({x:0,y:794,width:595,height:48,color:rgb(0.1,0.14,0.2)});
+              divPage.drawText("EVIDENCE OF CLOSURE",{x:40,y:815,size:16,font,color:rgb(1,1,1)});
+              divPage.drawText(cap.evidence_filename,{x:40,y:800,size:9,font,color:rgb(0.78,0.82,0.86)});
+              const copied=await mainPdf.copyPages(evPdf,Array.from({length:pageCount},(_,i)=>i));
+              copied.forEach(p=>mainPdf.addPage(p));
+              const merged=await mainPdf.save();
+              const url=URL.createObjectURL(new Blob([merged],{type:"application/pdf"}));
+              const a=document.createElement("a"); a.href=url; a.download=`CAPA-Report-${car.id}.pdf`;
+              a.click(); URL.revokeObjectURL(url);
+              showToast("PDF report with evidence generated","success");
+              return;
+            } catch(e){
+              // pdf-lib unavailable — reference page
+              doc.addPage();
+              doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+              doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+              doc.text("EVIDENCE OF CLOSURE",margin,12);
+              doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+              doc.text("Evidence is a PDF — open separately via the link below:",margin,34);
+              doc.setTextColor(1,87,155);
+              doc.textWithLink(cap.evidence_filename,margin,46,{url:cap.evidence_url});
+            }
+          } else {
+            // Other file type — reference page
+            doc.addPage();
+            doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+            doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+            doc.text("EVIDENCE OF CLOSURE",margin,12);
+            doc.setFillColor(245,248,252); doc.rect(margin,24,col,36,"F");
+            doc.setDrawColor(221,227,234); doc.rect(margin,24,col,36,"S");
+            doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+            doc.text("Attached File:",margin+4,36); doc.setFont("helvetica","normal");
+            doc.text(cap.evidence_filename,margin+4,44);
+            doc.setTextColor(1,87,155);
+            doc.textWithLink("Click to open / download",margin+4,54,{url:cap.evidence_url});
+          }
+        } else {
+          doc.addPage();
+          doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+          doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+          doc.text("EVIDENCE OF CLOSURE",margin,12);
+          doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+          doc.text("Evidence file could not be embedded. Access via link below:",margin,34);
+          doc.setTextColor(1,87,155);
+          doc.textWithLink(cap.evidence_filename||"View Evidence",margin,44,{url:cap.evidence_url});
+        }
+      } catch(evErr){ console.warn("Evidence attachment failed:",evErr); }
+    }
+
+    // ── Footer on every page (runs after evidence pages added) ──
     const pageCount=doc.getNumberOfPages();
     for(let p=1;p<=pageCount;p++){
       doc.setPage(p);
