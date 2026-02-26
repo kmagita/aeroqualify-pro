@@ -1006,8 +1006,8 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,100,100);
     doc.text("Pegasus Flyers (E.A.) Ltd. · "+`Generated: ${new Date().toLocaleDateString("en-GB")}  |  Total CARs: ${data.cars.length}`,14,44);
     doc.setTextColor(0,0,0);
-    autoTable(doc,{startY:50,head:[["CAR #","Finding","Clause","Severity","Status","Raised","Due","Resp. Manager"]],
-      body:data.cars.map(c=>[c.id,c.finding_description?.slice(0,40)||"—",c.qms_clause||"—",c.severity,c.status,fmt(c.date_raised),fmt(c.due_date),c.responsible_manager||"—"]),
+    autoTable(doc,{startY:50,head:[["CAR #","Severity","Status","Department","Raised","Due","Resp. Manager"]],
+      body:data.cars.map(c=>[c.id,c.severity,c.status,c.department||"—",fmt(c.date_raised),fmt(c.due_date),c.responsible_manager||"—"]),
       styles:{fontSize:9},headStyles:{fillColor:[1,87,155]},
       alternateRowStyles:{fillColor:[245,248,252]},
     });
