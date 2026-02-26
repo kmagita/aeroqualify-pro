@@ -838,6 +838,15 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       return y+maxH+2;
     };
 
+    // ── Page overflow guard ──
+    // jsPDF doesn't auto-paginate — we must check before every draw call.
+    // usable page height = 287 (leaving room for footer)
+    const FOOTER_Y=287; const NEW_PAGE_Y=20;
+    const needPage=(currentY,neededH=20)=>{
+      if(currentY+neededH>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; }
+      return currentY;
+    };
+
     const checkRow=(label,ok,x,y,w)=>{
       const bgR=ok?232:245; const bgG=ok?245:248; const bgB=ok?233:252;
       doc.setFillColor(bgR,bgG,bgB); doc.rect(x,y,w,7,"F");
@@ -909,32 +918,51 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     });
     y+=20;
 
+    // Helper: estimate box height without drawing (used for page overflow checks)
+    const estBoxH=(value,w)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(9);
+      const lines=doc.splitTextToSize(String(value||"—"),w-5);
+      return Math.max(14,5+4+lines.length*LINE_H+3+2);
+    };
+
     // ── Section 1: CAR Details ──
+    y=needPage(y,12);
     y=sectionTitle("SECTION 1 — CORRECTIVE ACTION REQUEST (CAR)",y);
-    y=box("Description of Finding",car.finding_description,margin,y,col);
-    y=box("QMS Clause Reference",car.qms_clause,margin,y,col);
-    y=boxRow([["CAR Number",car.id],["Date Raised",fmt(car.date_raised)]],margin,y,col);
-    y=boxRow([["Severity",car.severity],["Status",car.status]],margin,y,col);
-    y=boxRow([["Department",car.department],["Due Date",fmt(car.due_date)]],margin,y,col);
-    y=boxRow([["Responsible Manager",car.responsible_manager],["Raised By",car.raised_by_name]],margin,y,col);
+    y=needPage(y,estBoxH(car.finding_description,col)); y=box("Description of Finding",car.finding_description,margin,y,col);
+    y=needPage(y,estBoxH(car.qms_clause,col));          y=box("QMS Clause Reference",car.qms_clause,margin,y,col);
+    y=needPage(y,14); y=boxRow([["CAR Number",car.id],["Date Raised",fmt(car.date_raised)]],margin,y,col);
+    y=needPage(y,14); y=boxRow([["Severity",car.severity],["Status",car.status]],margin,y,col);
+    y=needPage(y,14); y=boxRow([["Department",car.department],["Due Date",fmt(car.due_date)]],margin,y,col);
+    y=needPage(y,14); y=boxRow([["Responsible Manager",car.responsible_manager],["Raised By",car.raised_by_name]],margin,y,col);
     y+=4;
 
     // ── Section 2: CAP ──
+    y=needPage(y,12);
     y=sectionTitle("SECTION 2 — CORRECTIVE ACTION PLAN (CAP)",y,[0,105,92]);
     if(cap){
-      y=box("Immediate Corrective Action",cap.immediate_action,margin,y,col);
-      y=box("Root Cause Analysis",cap.root_cause_analysis,margin,y,col);
-      y=box("Corrective Action",cap.corrective_action,margin,y,col);
-      y=box("Preventive Action",cap.preventive_action,margin,y,col);
+      const cap2Fields=[
+        ["Immediate Corrective Action",cap.immediate_action],
+        ["Root Cause Analysis",cap.root_cause_analysis],
+        ["Corrective Action",cap.corrective_action],
+        ["Preventive Action",cap.preventive_action],
+      ];
+      cap2Fields.forEach(([label,val])=>{
+        y=needPage(y,estBoxH(val,col));
+        y=box(label,val,margin,y,col);
+      });
       const evVal=cap.evidence_filename?"[Attached] "+cap.evidence_filename:"— No evidence uploaded";
+      y=needPage(y,estBoxH(evVal,col));
       y=box("Evidence of Closure",evVal,margin,y,col);
       if(cap.evidence_url){
+        y=needPage(y,6);
         doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155);
         doc.textWithLink("View / Download Evidence File",margin+2.5,y-1,{url:cap.evidence_url});
         doc.setTextColor(0,0,0); y+=3;
       }
+      y=needPage(y,14);
       y=boxRow([["Submitted By",cap.submitted_by_name||"—"],["Submitted At",cap.submitted_at?new Date(cap.submitted_at).toLocaleString():"—"]],margin,y,col);
     } else {
+      y=needPage(y,14);
       doc.setFillColor(255,243,224); doc.rect(margin,y,col,10,"F");
       doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(230,81,0);
       doc.text("CAP not yet submitted by the responsible manager.",margin+4,y+6.5); y+=12;
@@ -942,7 +970,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     y+=4;
 
     // ── Section 3: Verification ──
-    if(y>230){ doc.addPage(); y=20; }
+    y=needPage(y,12);
     y=sectionTitle("SECTION 3 — CAPA VERIFICATION",y,[69,39,160]);
     if(verif){
       const checks=[
@@ -953,12 +981,13 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
         ["Evidence of closure is satisfactory",verif.evidence_ok],
         ["Recurrence of the finding is prevented",verif.recurrence_prevented],
       ];
-      checks.forEach(([label,ok])=>{ y=checkRow(label,ok,margin,y,col); });
+      checks.forEach(([label,ok])=>{ y=needPage(y,9); y=checkRow(label,ok,margin,y,col); });
       y+=2;
-      y=boxRow([["Effectiveness Rating",verif.effectiveness_rating||"—"],["Final Status",verif.status||"—"]],margin,y,col);
-      y=boxRow([["Verified By",verif.verified_by_name||"—"],["Verified At",verif.verified_at?new Date(verif.verified_at).toLocaleString():"—"]],margin,y,col);
-      if(verif.verifier_comments) y=box("Verifier Comments",verif.verifier_comments,margin,y,col);
+      y=needPage(y,14); y=boxRow([["Effectiveness Rating",verif.effectiveness_rating||"—"],["Final Status",verif.status||"—"]],margin,y,col);
+      y=needPage(y,14); y=boxRow([["Verified By",verif.verified_by_name||"—"],["Verified At",verif.verified_at?new Date(verif.verified_at).toLocaleString():"—"]],margin,y,col);
+      if(verif.verifier_comments){ y=needPage(y,estBoxH(verif.verifier_comments,col)); y=box("Verifier Comments",verif.verifier_comments,margin,y,col); }
     } else {
+      y=needPage(y,14);
       doc.setFillColor(227,242,253); doc.rect(margin,y,col,10,"F");
       doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(1,87,155);
       doc.text("Verification not yet completed by the Quality Manager.",margin+4,y+6.5); y+=12;
@@ -966,7 +995,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     y+=8;
 
     // ── Signature Section ──
-    if(y>245){ doc.addPage(); y=20; }
+    y=needPage(y,50);
     y=sectionTitle("SIGNATURES",y,[26,35,50]);
     const sigW=(col-6)/2;
     const qm=managers?.find(m=>m.role_title==="Quality Manager");
