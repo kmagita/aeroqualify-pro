@@ -14,6 +14,7 @@ export const TABLES = {
   audits: 'audits', contractors: 'contractors',
   changeLog: 'change_log', profiles: 'profiles',
   managers: 'responsible_managers',
+  risks: 'risk_register',
 };
 
 export async function logChange({ user, action, table, recordId, recordTitle, oldData, newData }) {
