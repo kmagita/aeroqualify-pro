@@ -1613,7 +1613,7 @@ const GenericPage = ({ title, subtitle, table, columns, modalFields, modalTitle,
               ? <tr><td colSpan={columns.length+1} style={{ padding:32, textAlign:"center", color:T.muted }}>No records found</td></tr>
               : rows.map((row,i)=>{
                 const due=row.due_date||row.expiry_date||row.next_audit||row.date;
-                const od=isOverdue(due)&&row.status!=="Closed"&&row.status!=="Approved";
+                const od=isOverdue(due)&&row.status!=="Closed"&&row.status!=="Approved"&&row.status!=="Completed";
                 return (
                   <tr key={row.id||i} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od?"#fff8f8":"" }}>
                     {columns.map(c=>(
