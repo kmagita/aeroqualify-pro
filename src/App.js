@@ -295,7 +295,14 @@ const Dashboard = ({ data }) => {
   const contScore   = contractorTot>0 ? (contractorOk/contractorTot)*5 : 5;
   const p5          = Math.round(auditScore + contScore);
 
-  const compScore   = Math.min(100, p1+p2+p3+p4+p5);
+  // Risk Register bonus/penalty (replaces p5 weighting when risks exist)
+  const totalRisks    = (data.risks||[]).length;
+  const openCritRisks = (data.risks||[]).filter(r=>r.residual_rating==="Critical"&&r.status!=="Closed").length;
+  const treatedRisks  = (data.risks||[]).filter(r=>r.treatment_action&&r.status!=="Open").length;
+  const riskPenalty   = Math.min(10, openCritRisks * 5);
+  const riskBonus     = totalRisks>0 ? Math.round((treatedRisks/totalRisks)*5) : 0;
+
+  const compScore   = Math.min(100, p1+p2+Math.max(0,p3-riskPenalty)+p4+p5+riskBonus);
   const scoreColor  = compScore>=90?"#2e7d32":compScore>=75?T.teal:compScore>=60?T.yellow:compScore>=40?"#e65100":T.red;
   const scoreLabel  = compScore>=90?"Excellent":compScore>=75?"Good":compScore>=60?"Satisfactory":compScore>=40?"Needs Attention":"Critical";
   const pillars     = [
@@ -519,9 +526,32 @@ const CARModal = ({ car, managers, onSave, onClose }) => {
 // ─── CAP Form Modal ───────────────────────────────────────────
 const CAPModal = ({ car, cap, onSave, onClose }) => {
   const [form, setForm] = useState(cap || { id:`CAP-${String(Date.now()).slice(-6)}`, car_id:car?.id, status:"Pending" });
-  const [file, setFile] = useState(null);
+  const [newFiles, setNewFiles] = useState([]); // files staged for upload
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
-  const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&(form.evidence_url||file);
+
+  // Existing saved files (array stored as JSON in evidence_files, or legacy single file)
+  const savedFiles = (() => {
+    try { return JSON.parse(form.evidence_files||"[]"); } catch{ return []; }
+  })();
+  const legacyFile = !form.evidence_files && form.evidence_filename
+    ? [{name:form.evidence_filename, url:form.evidence_url}] : [];
+  const allSaved = [...savedFiles, ...legacyFile];
+
+  const hasEvidence = allSaved.length>0 || newFiles.length>0;
+  const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&hasEvidence;
+
+  const addFiles = (e) => {
+    const picked = Array.from(e.target.files||[]);
+    setNewFiles(prev=>[...prev, ...picked]);
+    e.target.value=""; // allow re-selecting same file
+  };
+  const removeNew = (i) => setNewFiles(prev=>prev.filter((_,idx)=>idx!==i));
+  const removeSaved = (i) => {
+    const updated = allSaved.filter((_,idx)=>idx!==i);
+    set("evidence_files", JSON.stringify(updated));
+    if(updated.length===0){ set("evidence_filename",""); set("evidence_url",""); }
+  };
+
   return (
     <ModalShell title={`CAP Form – ${car?.id}`} onClose={onClose} wide>
       <div style={{ background:T.primaryLt, borderRadius:8, padding:"10px 14px", marginBottom:16, fontSize:12, color:T.primaryDk }}>
@@ -531,24 +561,60 @@ const CAPModal = ({ car, cap, onSave, onClose }) => {
       <Textarea label="Root Cause Analysis" rows={4} value={form.root_cause_analysis||""} onChange={e=>set("root_cause_analysis",e.target.value)} />
       <Textarea label="Corrective Action" rows={3} value={form.corrective_action||""} onChange={e=>set("corrective_action",e.target.value)} />
       <Textarea label="Preventive Action" rows={3} value={form.preventive_action||""} onChange={e=>set("preventive_action",e.target.value)} />
+
+      {/* Evidence upload */}
       <div style={{ marginBottom:14 }}>
-        <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:4 }}>Evidence of Closure</label>
-        <input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-          onChange={e=>{const f=e.target.files[0]; setFile(f); if(f) console.log("File selected:",f.name,f.size,f.type);}}
-          style={{ display:"block", width:"100%", fontSize:13, color:T.text, background:T.bg, border:`1px solid ${T.border}`, borderRadius:6, padding:"8px 10px" }} />
-        {file&&<div style={{ fontSize:12, color:T.primary, marginTop:6, background:T.primaryLt, borderRadius:6, padding:"6px 10px" }}>
-          📎 Ready to upload: <strong>{file.name}</strong> ({(file.size/1024).toFixed(1)} KB)
-        </div>}
-        {!file&&form.evidence_filename&&<div style={{ fontSize:12, color:T.green, marginTop:6, background:T.greenLt, borderRadius:6, padding:"6px 10px" }}>
-          ✓ Previously uploaded: <strong>{form.evidence_filename}</strong>
-          {form.evidence_url&&<a href={form.evidence_url} target="_blank" rel="noreferrer" style={{ marginLeft:8, color:T.primary }}>View</a>}
-        </div>}
-        {!file&&!form.evidence_filename&&<div style={{ fontSize:11, color:T.muted, marginTop:4 }}>Accepted: images, PDF, Word, Excel</div>}
+        <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:6 }}>Evidence of Closure</label>
+
+        {/* Already-saved files */}
+        {allSaved.length>0&&(
+          <div style={{ marginBottom:8 }}>
+            {allSaved.map((f,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.greenLt, border:`1px solid #a5d6a7`, borderRadius:6, padding:"6px 10px", marginBottom:4 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>📎</span>
+                  <div>
+                    <div style={{ fontSize:12, color:T.green, fontWeight:600 }}>{f.name}</div>
+                    {f.url&&<a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:T.primary }}>View file</a>}
+                  </div>
+                </div>
+                <button onClick={()=>removeSaved(i)} style={{ background:"none", border:"none", color:T.red, fontSize:16, cursor:"pointer", padding:"0 4px" }} title="Remove">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Newly staged files (not yet uploaded) */}
+        {newFiles.length>0&&(
+          <div style={{ marginBottom:8 }}>
+            {newFiles.map((f,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.primaryLt, border:`1px solid #90caf9`, borderRadius:6, padding:"6px 10px", marginBottom:4 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>🔄</span>
+                  <div>
+                    <div style={{ fontSize:12, color:T.primary, fontWeight:600 }}>{f.name}</div>
+                    <div style={{ fontSize:11, color:T.muted }}>{(f.size/1024).toFixed(1)} KB — ready to upload</div>
+                  </div>
+                </div>
+                <button onClick={()=>removeNew(i)} style={{ background:"none", border:"none", color:T.red, fontSize:16, cursor:"pointer", padding:"0 4px" }} title="Remove">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* File picker */}
+        <label style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, border:`2px dashed ${T.border}`, borderRadius:8, padding:"10px 14px", cursor:"pointer", fontSize:12, color:T.muted }}>
+          <span style={{ fontSize:18 }}>📁</span>
+          <span>Click to add files &nbsp;<span style={{ color:T.light }}>— images, PDF, Word, Excel (multiple allowed)</span></span>
+          <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={addFiles} style={{ display:"none" }} />
+        </label>
+        {!hasEvidence&&<div style={{ fontSize:11, color:T.red, marginTop:4 }}>⚠ At least one evidence file is required to complete the CAP.</div>}
       </div>
+
       {allFilled&&<div style={{ background:T.greenLt, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:14 }}>✓ All fields complete — CAR will be set to <strong>Pending Verification</strong> upon save.</div>}
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
         <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn onClick={()=>onSave(form, file)}>Submit CAP</Btn>
+        <Btn onClick={()=>onSave(form, newFiles)}>Submit CAP</Btn>
       </div>
     </ModalShell>
   );
@@ -585,7 +651,13 @@ const VerificationModal = ({ car, cap, verif, onSave, onClose }) => {
           <div style={{ marginTop:4 }}><strong>Root Cause:</strong> {cap.root_cause_analysis}</div>
           <div style={{ marginTop:4 }}><strong>Corrective Action:</strong> {cap.corrective_action}</div>
           <div style={{ marginTop:4 }}><strong>Preventive Action:</strong> {cap.preventive_action}</div>
-          {cap.evidence_filename&&<div style={{ marginTop:4, color:T.green }}><strong>Evidence:</strong> {cap.evidence_filename}</div>}
+          {(()=>{
+            let fs=[];try{fs=JSON.parse(cap.evidence_files||"[]");}catch{}
+            if(!cap.evidence_files&&cap.evidence_filename) fs=[{name:cap.evidence_filename}];
+            return fs.length>0&&<div style={{ marginTop:4, color:T.green }}>
+              <strong>Evidence ({fs.length} file{fs.length!==1?"s":""}):</strong> {fs.map(f=>f.name).join(", ")}
+            </div>;
+          })()}
         </div>
       )}
       <div style={{ fontWeight:600, fontSize:13, color:T.text, marginBottom:10 }}>Verification Checklist</div>
@@ -728,14 +800,27 @@ const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
                     <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{val||"—"}</div>
                   </div>
                 ))}
-                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Evidence of Closure</div>
-                  {cap.evidence_filename
-                    ? <div>
-                        <div style={{ fontSize:13,color:T.green,fontWeight:600 }}>✓ {cap.evidence_filename}</div>
-                        {cap.evidence_url && <a href={cap.evidence_url} target="_blank" rel="noreferrer" style={{ fontSize:12,color:T.primary,display:"block",marginTop:4 }}>🔗 View / Download File</a>}
-                      </div>
-                    : <div style={{ fontSize:13,color:T.muted }}>— No evidence uploaded</div>}
+                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:"1/-1" }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8 }}>Evidence of Closure</div>
+                  {(()=>{
+                    let files=[];
+                    try{files=JSON.parse(cap.evidence_files||"[]");}catch{}
+                    if(!cap.evidence_files&&cap.evidence_filename) files=[{name:cap.evidence_filename,url:cap.evidence_url}];
+                    return files.length>0
+                      ? <div style={{ display:"flex",flexDirection:"column",gap:6 }}>
+                          {files.map((f,i)=>(
+                            <div key={i} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:"#e8f5e9",borderRadius:6,padding:"7px 12px" }}>
+                              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                                <span>📎</span>
+                                <span style={{ fontSize:13,color:T.green,fontWeight:600 }}>{f.name}</span>
+                              </div>
+                              {f.url&&!f.url.startsWith("data:")&&
+                                <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize:12,color:T.primary,fontWeight:600 }}>🔗 View</a>}
+                            </div>
+                          ))}
+                        </div>
+                      : <div style={{ fontSize:13,color:T.muted }}>— No evidence uploaded</div>;
+                  })()}
                 </div>
                 <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
                   <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Submitted By</div>
@@ -830,44 +915,53 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     setModal(null); onRefresh();
   };
 
-  const saveCap = async(form, file) => {
-    let evidence_url=form.evidence_url, evidence_filename=form.evidence_filename;
-
-    if(file){
-      // ── Step 1: Try Supabase storage upload ──
+  const saveCap = async(form, newFiles) => {
+    // Upload helper — tries Supabase storage, falls back to base64
+    const uploadOne = async(file) => {
       try {
-        // Ensure bucket exists (create if missing)
         await supabase.storage.createBucket("capa-evidence",{public:true}).catch(()=>{});
         const path=`evidence/${selected.id}/${Date.now()}_${file.name}`;
         const{error:ue}=await supabase.storage.from("capa-evidence").upload(path,file,{upsert:true,contentType:file.type});
         if(!ue){
           const{data:urlData}=supabase.storage.from("capa-evidence").getPublicUrl(path);
-          evidence_url=urlData.publicUrl;
-          evidence_filename=file.name;
-          showToast(`Evidence uploaded: ${file.name}`,"success");
-        } else {
-          // ── Step 2: Storage failed — fall back to base64 inline ──
-          console.warn("Storage upload failed:",ue.message,"— falling back to base64");
-          const reader=new FileReader();
-          evidence_url=await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result);reader.onerror=rej;reader.readAsDataURL(file);});
-          evidence_filename=file.name;
-          showToast(`Evidence saved (inline): ${file.name}`,"success");
+          return {name:file.name, url:urlData.publicUrl, size:file.size, type:file.type};
         }
-      } catch(storageErr){
-        console.warn("Storage error:",storageErr,"— falling back to base64");
-        try {
-          const reader=new FileReader();
-          evidence_url=await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result);reader.onerror=rej;reader.readAsDataURL(file);});
-          evidence_filename=file.name;
-          showToast(`Evidence saved (inline): ${file.name}`,"success");
-        } catch(b64Err){
-          showToast("Warning: evidence file could not be saved — proceed without it","error");
-        }
+        // fallback: base64
+        const reader=new FileReader();
+        const dataUrl=await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result);reader.onerror=rej;reader.readAsDataURL(file);});
+        return {name:file.name, url:dataUrl, size:file.size, type:file.type, inline:true};
+      } catch(e){
+        console.warn("Upload failed for",file.name,e);
+        return null;
       }
+    };
+
+    // Start from existing saved files
+    let existingFiles = [];
+    try { existingFiles=JSON.parse(form.evidence_files||"[]"); } catch{}
+    // Also migrate any legacy single-file evidence
+    if(!form.evidence_files && form.evidence_filename){
+      existingFiles=[{name:form.evidence_filename, url:form.evidence_url}];
     }
 
-    const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&(evidence_url||form.evidence_url);
-    const capPayload={...form,evidence_url,evidence_filename,submitted_by:user.id,submitted_by_name:profile?.full_name||user.email,submitted_at:new Date().toISOString(),status:allFilled?"Complete":"Pending"};
+    // Upload all new files in parallel
+    if(newFiles && newFiles.length>0){
+      showToast(`Uploading ${newFiles.length} file(s)…`,"success");
+      const results = await Promise.all(newFiles.map(uploadOne));
+      const uploaded = results.filter(Boolean);
+      existingFiles = [...existingFiles, ...uploaded];
+      showToast(`${uploaded.length} file(s) uploaded`,"success");
+    }
+
+    const evidence_files = JSON.stringify(existingFiles);
+    // Keep legacy fields populated from first file for backwards compat
+    const firstFile = existingFiles[0];
+    const evidence_url      = firstFile?.url || "";
+    const evidence_filename = firstFile?.name || "";
+
+    const hasEvidence = existingFiles.length>0;
+    const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&hasEvidence;
+    const capPayload={...form,evidence_files,evidence_url,evidence_filename,submitted_by:user.id,submitted_by_name:profile?.full_name||user.email,submitted_at:new Date().toISOString(),status:allFilled?"Complete":"Pending"};
     const{error}=await supabase.from(TABLES.caps).upsert(capPayload);
     if(error){showToast(`Error saving CAP: ${error.message}`,"error");return;}
     if(allFilled){
@@ -1067,15 +1161,22 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
         y=needPage(y,estBoxH(val,col));
         y=box(label,val,margin,y,col);
       });
-      const evVal=cap.evidence_filename?"[Attached] "+cap.evidence_filename:"— No evidence uploaded";
-      y=needPage(y,estBoxH(evVal,col));
-      y=box("Evidence of Closure",evVal,margin,y,col);
-      if(cap.evidence_url){
-        y=needPage(y,6);
-        doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155);
-        doc.textWithLink("View / Download Evidence File",margin+2.5,y-1,{url:cap.evidence_url});
-        doc.setTextColor(0,0,0); y+=3;
-      }
+      let evFiles2=[];
+      try{evFiles2=JSON.parse(cap.evidence_files||"[]");}catch{}
+      if(!cap.evidence_files&&cap.evidence_filename) evFiles2=[{name:cap.evidence_filename,url:cap.evidence_url}];
+      const evVal=evFiles2.length>0
+        ?evFiles2.map((f,i)=>`${i+1}. ${f.name}`).join("\n")
+        :"\u2014 No evidence uploaded";
+      y=needPage(y,estBoxH(evVal,col)+4);
+      y=box(`Evidence of Closure (${evFiles2.length} file${evFiles2.length!==1?"s":""})`,evVal,margin,y,col);
+      evFiles2.forEach(f=>{
+        if(f.url&&!f.url.startsWith("data:")){
+          y=needPage(y,6);
+          doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155);
+          doc.textWithLink("  Open: "+f.name,margin+2.5,y-1,{url:f.url});
+          doc.setTextColor(0,0,0); y+=4;
+        }
+      });
       y=needPage(y,14);
       y=boxRow([["Submitted By",cap.submitted_by_name||"—"],["Submitted At",cap.submitted_at?new Date(cap.submitted_at).toLocaleString():"—"]],margin,y,col);
     } else {
@@ -1133,105 +1234,176 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     });
     y+=40;
 
-    // ── Attach evidence file as final page(s) ──
-    if(cap?.evidence_url && cap?.evidence_filename){
-      try {
-        const ext=(cap.evidence_filename.split(".").pop()||"").toLowerCase();
+    // ── Attach all evidence files as final pages ──────────────────
+    let pdfEvidenceFiles=[];
+    try{pdfEvidenceFiles=JSON.parse(cap?.evidence_files||"[]");}catch{}
+    if(!cap?.evidence_files&&cap?.evidence_filename) pdfEvidenceFiles=[{name:cap.evidence_filename,url:cap.evidence_url}];
+
+    // Track which jsPDF page numbers are evidence pages (for footer labelling)
+    const reportPageCount = doc.getNumberOfPages(); // pages before any evidence
+    const evidencePageMap = {}; // pageNum → {fileIndex, fileName, fileTotal}
+
+    for(let fi=0;fi<pdfEvidenceFiles.length;fi++){
+      const evFile=pdfEvidenceFiles[fi];
+      if(!evFile?.url) continue;
+      try{
+        const ext=(evFile.name.split(".").pop()||"").toLowerCase();
         const isImage=["jpg","jpeg","png","gif","webp"].includes(ext);
-        const isPDF=ext==="pdf";
-        const resp=await fetch(cap.evidence_url);
-        if(resp.ok){
-          if(isImage){
+        const isInline=evFile.url.startsWith("data:");
+
+        if(isImage){
+          let dataUrl=evFile.url;
+          if(!isInline){
+            const resp=await fetch(evFile.url);
+            if(!resp.ok) throw new Error("fetch failed");
             const blob=await resp.blob();
-            const dataUrl=await new Promise(res=>{
-              const reader=new FileReader();
-              reader.onload=e=>res(e.target.result);
-              reader.readAsDataURL(blob);
-            });
-            doc.addPage();
-            doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
-            doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
-            doc.text("EVIDENCE OF CLOSURE",margin,12);
-            doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(200,210,220);
-            doc.text(cap.evidence_filename,W-margin,12,{align:"right"});
-            const imgProps=doc.getImageProperties(dataUrl);
-            const maxW=W-margin*2; const maxH=255;
-            let iw=imgProps.width; let ih=imgProps.height;
-            const scale=Math.min(maxW/iw,maxH/ih,1);
-            iw=iw*scale; ih=ih*scale;
-            const ix=margin+(maxW-iw)/2;
-            doc.addImage(dataUrl,ext==="png"?"PNG":"JPEG",ix,22,iw,ih);
-          } else if(isPDF){
-            // PDF evidence — try pdf-lib merge
-            try {
-              const {PDFDocument}=await import("pdf-lib");
-              const mainBytes=doc.output("arraybuffer");
-              const mainPdf=await PDFDocument.load(mainBytes);
-              const evBytes=await resp.arrayBuffer();
-              const evPdf=await PDFDocument.load(evBytes);
-              const pageCount=evPdf.getPageCount();
-              // Add a divider page
-              const {rgb,StandardFonts}=await import("pdf-lib");
-              const divPage=mainPdf.addPage([595,842]);
-              const font=await mainPdf.embedFont(StandardFonts.HelveticaBold);
-              divPage.drawRectangle({x:0,y:794,width:595,height:48,color:rgb(0.1,0.14,0.2)});
-              divPage.drawText("EVIDENCE OF CLOSURE",{x:40,y:815,size:16,font,color:rgb(1,1,1)});
-              divPage.drawText(cap.evidence_filename,{x:40,y:800,size:9,font,color:rgb(0.78,0.82,0.86)});
-              const copied=await mainPdf.copyPages(evPdf,Array.from({length:pageCount},(_,i)=>i));
-              copied.forEach(p=>mainPdf.addPage(p));
-              const merged=await mainPdf.save();
-              const url=URL.createObjectURL(new Blob([merged],{type:"application/pdf"}));
-              const a=document.createElement("a"); a.href=url; a.download=`CAPA-Report-${car.id}.pdf`;
-              a.click(); URL.revokeObjectURL(url);
-              showToast("PDF report with evidence generated","success");
-              return;
-            } catch(e){
-              // pdf-lib unavailable — reference page
-              doc.addPage();
-              doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
-              doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
-              doc.text("EVIDENCE OF CLOSURE",margin,12);
-              doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
-              doc.text("Evidence is a PDF — open separately via the link below:",margin,34);
-              doc.setTextColor(1,87,155);
-              doc.textWithLink(cap.evidence_filename,margin,46,{url:cap.evidence_url});
-            }
-          } else {
-            // Other file type — reference page
-            doc.addPage();
-            doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
-            doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
-            doc.text("EVIDENCE OF CLOSURE",margin,12);
-            doc.setFillColor(245,248,252); doc.rect(margin,24,col,36,"F");
-            doc.setDrawColor(221,227,234); doc.rect(margin,24,col,36,"S");
-            doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(26,35,50);
-            doc.text("Attached File:",margin+4,36); doc.setFont("helvetica","normal");
-            doc.text(cap.evidence_filename,margin+4,44);
-            doc.setTextColor(1,87,155);
-            doc.textWithLink("Click to open / download",margin+4,54,{url:cap.evidence_url});
+            dataUrl=await new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(blob);});
           }
-        } else {
           doc.addPage();
+          const pg=doc.getNumberOfPages();
+          evidencePageMap[pg]={fileIndex:fi+1,fileName:evFile.name,fileTotal:pdfEvidenceFiles.length};
+
+          // Dark header bar
           doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
           doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
-          doc.text("EVIDENCE OF CLOSURE",margin,12);
-          doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
-          doc.text("Evidence file could not be embedded. Access via link below:",margin,34);
-          doc.setTextColor(1,87,155);
-          doc.textWithLink(cap.evidence_filename||"View Evidence",margin,44,{url:cap.evidence_url});
+          doc.text(`EVIDENCE OF CLOSURE — File ${fi+1} of ${pdfEvidenceFiles.length}`,margin,8);
+          doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(200,210,220);
+          doc.text(evFile.name,W-margin,8,{align:"right"});
+          doc.setFontSize(7); doc.setTextColor(160,180,200);
+          doc.text(`CAR: ${car.id}  |  Evidence of Closure`,margin,14);
+
+          // Image centred between header and footer
+          const imgTop=22; const imgBottom=284;
+          const maxW=W-margin*2; const maxH=imgBottom-imgTop;
+          const imgProps=doc.getImageProperties(dataUrl);
+          let iw=imgProps.width; let ih=imgProps.height;
+          const scale=Math.min(maxW/iw,maxH/ih,1);
+          iw*=scale; ih*=scale;
+          doc.addImage(dataUrl,ext==="png"?"PNG":"JPEG",margin+(maxW-iw)/2,imgTop+(maxH-ih)/2,iw,ih);
+
+        } else if(ext==="pdf"&&!isInline){
+          // Queue PDF files for pdf-lib merge
+          try{
+            if(!window._pdfMergeQueue) window._pdfMergeQueue=[];
+            const resp=await fetch(evFile.url);
+            if(resp.ok) window._pdfMergeQueue.push({
+              name:evFile.name, bytes:await resp.arrayBuffer(),
+              index:fi+1, total:pdfEvidenceFiles.length, carId:car.id
+            });
+          } catch(e){
+            // Fallback reference page
+            doc.addPage();
+            const pg=doc.getNumberOfPages();
+            evidencePageMap[pg]={fileIndex:fi+1,fileName:evFile.name,fileTotal:pdfEvidenceFiles.length};
+            doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+            doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+            doc.text(`EVIDENCE OF CLOSURE — File ${fi+1} of ${pdfEvidenceFiles.length}`,margin,8);
+            doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(200,210,220);
+            doc.text(evFile.name,W-margin,8,{align:"right"});
+            doc.setFontSize(7); doc.setTextColor(160,180,200);
+            doc.text(`CAR: ${car.id}  |  Evidence of Closure`,margin,14);
+            doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+            doc.text(evFile.name+" (PDF — open separately via link below)",margin,32);
+            doc.setTextColor(1,87,155); doc.textWithLink("Click to open",margin,42,{url:evFile.url});
+          }
+        } else {
+          // Other file types — reference page
+          doc.addPage();
+          const pg=doc.getNumberOfPages();
+          evidencePageMap[pg]={fileIndex:fi+1,fileName:evFile.name,fileTotal:pdfEvidenceFiles.length};
+          doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+          doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+          doc.text(`EVIDENCE OF CLOSURE — File ${fi+1} of ${pdfEvidenceFiles.length}`,margin,8);
+          doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(200,210,220);
+          doc.text(evFile.name,W-margin,8,{align:"right"});
+          doc.setFontSize(7); doc.setTextColor(160,180,200);
+          doc.text(`CAR: ${car.id}  |  Evidence of Closure`,margin,14);
+          doc.setFillColor(245,248,252); doc.rect(margin,24,col,36,"F");
+          doc.setDrawColor(221,227,234); doc.rect(margin,24,col,36,"S");
+          doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+          doc.text("Attached File: "+evFile.name,margin+4,36);
+          if(!isInline){doc.setTextColor(1,87,155);doc.textWithLink("Click to open / download",margin+4,48,{url:evFile.url});}
+          else{doc.setFont("helvetica","italic");doc.setFontSize(8);doc.setTextColor(95,114,133);doc.text("(Stored inline — download from AeroQualify Pro)",margin+4,48);}
         }
-      } catch(evErr){ console.warn("Evidence attachment failed:",evErr); }
+      } catch(evErr){ console.warn("Evidence page failed for",evFile.name,evErr); }
     }
 
-    // ── Footer on every page (runs after evidence pages added) ──
-    const pageCount=doc.getNumberOfPages();
-    for(let p=1;p<=pageCount;p++){
+    // ── Footer on every page — evidence pages get special labelling ──
+    const totalPagesBeforeMerge=doc.getNumberOfPages();
+    for(let p=1;p<=totalPagesBeforeMerge;p++){
       doc.setPage(p);
-      doc.setFillColor(245,248,252); doc.rect(0,287,W,10,"F");
-      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(0,287,W,287);
-      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(95,114,133);
-      doc.text("Pegasus Flyers (E.A.) Ltd.  |  Confidential QMS Document  |  AS9100D / ISO 9001:2015",margin,293);
-      doc.text("Page "+p+" of "+pageCount,W-margin,293,{align:"right"});
+      const isEvPage=p>reportPageCount;
+      const evInfo=evidencePageMap[p];
+      // Footer bar
+      doc.setFillColor(isEvPage?26:245, isEvPage?35:248, isEvPage?50:252);
+      doc.rect(0,287,W,10,"F");
+      doc.setDrawColor(isEvPage?60:221, isEvPage?80:227, isEvPage?100:234);
+      doc.setLineWidth(0.3); doc.line(0,287,W,287);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7);
+      doc.setTextColor(isEvPage?200:95, isEvPage?210:114, isEvPage?220:133);
+      if(isEvPage&&evInfo){
+        // Evidence page footer — clearly labelled
+        doc.setFont("helvetica","bold");
+        doc.text(`EVIDENCE OF CLOSURE  |  File ${evInfo.fileIndex} of ${evInfo.fileTotal}  |  ${evInfo.fileName}`,margin,293);
+        doc.setFont("helvetica","normal");
+      } else {
+        doc.text("Pegasus Flyers (E.A.) Ltd.  |  Confidential QMS Document  |  AS9100D / ISO 9001:2015",margin,293);
+      }
+      doc.text("Page "+p+" of "+totalPagesBeforeMerge,W-margin,293,{align:"right"});
+    }
+
+    // ── Merge queued PDF evidence files via pdf-lib ──
+    if(window._pdfMergeQueue?.length>0){
+      try{
+        const{PDFDocument}=await import("pdf-lib");
+        const{rgb,StandardFonts}=await import("pdf-lib");
+        const mainBytes=doc.output("arraybuffer");
+        const mainPdf=await PDFDocument.load(mainBytes);
+        const boldFont=await mainPdf.embedFont(StandardFonts.HelveticaBold);
+        const normFont=await mainPdf.embedFont(StandardFonts.Helvetica);
+
+        for(const q of window._pdfMergeQueue){
+          // Divider page
+          const divPage=mainPdf.addPage([595,842]);
+          divPage.drawRectangle({x:0,y:794,width:595,height:48,color:rgb(0.1,0.14,0.2)});
+          divPage.drawText(`EVIDENCE OF CLOSURE — File ${q.index} of ${q.total}`,{x:14,y:826,size:12,font:boldFont,color:rgb(1,1,1)});
+          divPage.drawText(q.name,{x:14,y:810,size:8,font:normFont,color:rgb(0.78,0.82,0.86)});
+          divPage.drawText(`CAR: ${q.carId}  |  Evidence of Closure`,{x:14,y:800,size:7,font:normFont,color:rgb(0.63,0.71,0.78)});
+          // Footer on divider
+          divPage.drawRectangle({x:0,y:0,width:595,height:25,color:rgb(0.1,0.14,0.2)});
+          divPage.drawText(`EVIDENCE OF CLOSURE  |  File ${q.index} of ${q.total}  |  ${q.name}`,{x:14,y:10,size:7,font:boldFont,color:rgb(0.78,0.82,0.86)});
+
+          // Copy evidence PDF pages — stamp each with header + footer
+          const evPdf=await PDFDocument.load(q.bytes);
+          const evPageCount=evPdf.getPageCount();
+          const copied=await mainPdf.copyPages(evPdf,Array.from({length:evPageCount},(_,i)=>i));
+          copied.forEach((pg,pi)=>{
+            mainPdf.addPage(pg);
+            const {width,height}=pg.getSize();
+            // Header stamp on each evidence page
+            pg.drawRectangle({x:0,y:height-18,width,height:18,color:rgb(0.1,0.14,0.2)});
+            pg.drawText(`EVIDENCE OF CLOSURE — File ${q.index} of ${q.total}`,{x:14,y:height-10,size:9,font:boldFont,color:rgb(1,1,1)});
+            pg.drawText(q.name,{x:width-14,y:height-10,size:7,font:normFont,color:rgb(0.78,0.82,0.86),maxWidth:200});
+            pg.drawText(`CAR: ${q.carId}  |  Page ${pi+1} of ${evPageCount}`,{x:14,y:height-16,size:6,font:normFont,color:rgb(0.63,0.71,0.78)});
+            // Footer stamp on each evidence page
+            pg.drawRectangle({x:0,y:0,width,height:18,color:rgb(0.1,0.14,0.2)});
+            pg.drawText(`EVIDENCE OF CLOSURE  |  File ${q.index} of ${q.total}  |  ${q.name}`,{x:14,y:7,size:6,font:boldFont,color:rgb(0.78,0.82,0.86)});
+            const totalDocPages=mainPdf.getPageCount();
+            pg.drawText(`Page ${totalDocPages} of ?`,{x:width-50,y:7,size:6,font:normFont,color:rgb(0.78,0.82,0.86)});
+          });
+        }
+        window._pdfMergeQueue=[];
+        const merged=await mainPdf.save();
+        const url=URL.createObjectURL(new Blob([merged],{type:"application/pdf"}));
+        const a=document.createElement("a"); a.href=url; a.download=`CAPA-Report-${car.id}.pdf`;
+        a.click(); URL.revokeObjectURL(url);
+        showToast("PDF report with all evidence generated","success");
+        return;
+      } catch(mergeErr){
+        console.warn("PDF merge failed:",mergeErr);
+        window._pdfMergeQueue=[];
+        // Fall through to doc.save() below
+      }
     }
 
     doc.save(`CAPA-Report-${car.id}.pdf`);
@@ -1585,6 +1757,359 @@ const CONTRACTOR_FIELDS = [
   {key:"last_audit",label:"Last Audit Date",type:"date"},{key:"next_audit",label:"Next Audit Date",type:"date"},
 ];
 
+
+// ─── Risk Register ────────────────────────────────────────────
+// ICAO SMS Annex 19 — 5×5 Risk Matrix
+// Severity: Catastrophic(5) / Hazardous(4) / Major(3) / Minor(2) / Negligible(1)
+// Likelihood: Frequent(5) / Occasional(4) / Remote(3) / Improbable(2) / Extremely Improbable(1)
+// Risk Index = Severity × Likelihood
+// Critical ≥15 | High 10–14 | Medium 5–9 | Low ≤4
+
+const RISK_SEVERITY = [
+  {value:5,label:"Catastrophic",desc:"Hull loss, multiple fatalities"},
+  {value:4,label:"Hazardous",   desc:"Serious injury, major damage"},
+  {value:3,label:"Major",       desc:"Serious incident, injury"},
+  {value:2,label:"Minor",       desc:"Incident, minor injury"},
+  {value:1,label:"Negligible",  desc:"Nuisance, little consequence"},
+];
+const RISK_LIKELIHOOD = [
+  {value:5,label:"Frequent",              desc:"Likely to occur many times"},
+  {value:4,label:"Occasional",            desc:"Likely to occur sometimes"},
+  {value:3,label:"Remote",                desc:"Unlikely but possible"},
+  {value:2,label:"Improbable",            desc:"Very unlikely to occur"},
+  {value:1,label:"Extremely Improbable",  desc:"Almost inconceivable"},
+];
+const RISK_CATEGORIES = ["Flight Operations","Ground Operations","Training","Maintenance","Security","Environmental","Organisational"];
+
+const riskRating=(s,l)=>{
+  const idx=s*l;
+  if(idx>=15) return {label:"Critical",color:"#b71c1c",bg:"#ffebee"};
+  if(idx>=10) return {label:"High",    color:"#e65100",bg:"#fff3e0"};
+  if(idx>=5)  return {label:"Medium",  color:"#f57f17",bg:"#fffde7"};
+  return              {label:"Low",    color:"#2e7d32",bg:"#e8f5e9"};
+};
+
+const RiskMatrix = ({ severity, likelihood, onSelect }) => {
+  const sev=[5,4,3,2,1]; const lik=[1,2,3,4,5];
+  const cellColor=(s,l)=>{
+    const r=riskRating(s,l);
+    const isSelected=s===severity&&l===likelihood;
+    return {background:isSelected?r.color:r.bg, color:isSelected?"#fff":r.color,
+      border:isSelected?`2px solid ${r.color}`:`1px solid ${r.color}33`,
+      fontWeight:isSelected?700:400, transform:isSelected?"scale(1.08)":"scale(1)", transition:"all 0.15s"};
+  };
+  return (
+    <div style={{ overflowX:"auto", marginBottom:16 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>
+        Risk Matrix — click to select Severity × Likelihood
+      </div>
+      <table style={{ borderCollapse:"collapse", fontSize:11 }}>
+        <thead>
+          <tr>
+            <th style={{ padding:"6px 10px", background:"#f5f8fc", border:`1px solid ${T.border}`, fontSize:10, color:T.muted, whiteSpace:"nowrap" }}>Severity ↓ / Likelihood →</th>
+            {lik.map(l=><th key={l} style={{ padding:"6px 10px", background:"#f5f8fc", border:`1px solid ${T.border}`, textAlign:"center", minWidth:70, fontSize:10, color:T.muted }}>
+              {RISK_LIKELIHOOD.find(x=>x.value===l)?.label}
+            </th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {sev.map(s=>(
+            <tr key={s}>
+              <td style={{ padding:"6px 10px", background:"#f5f8fc", border:`1px solid ${T.border}`, fontWeight:600, fontSize:11, color:T.text, whiteSpace:"nowrap" }}>
+                {RISK_SEVERITY.find(x=>x.value===s)?.label}
+              </td>
+              {lik.map(l=>{
+                const r=riskRating(s,l); const cs=cellColor(s,l);
+                return (
+                  <td key={l} onClick={()=>onSelect&&onSelect(s,l)}
+                    style={{ padding:"8px 6px", border:`1px solid ${T.border}`, textAlign:"center", cursor:onSelect?"pointer":"default", ...cs, userSelect:"none", borderRadius:4 }}>
+                    <div style={{ fontSize:12, fontWeight:cs.fontWeight }}>{s*l}</div>
+                    <div style={{ fontSize:9, marginTop:1 }}>{r.label}</div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display:"flex", gap:12, marginTop:8, flexWrap:"wrap" }}>
+        {[{label:"Critical",color:"#b71c1c"},{label:"High",color:"#e65100"},{label:"Medium",color:"#f57f17"},{label:"Low",color:"#2e7d32"}].map(r=>(
+          <div key={r.label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11 }}>
+            <div style={{ width:12,height:12,borderRadius:2,background:r.color }}/>
+            <span style={{ color:T.muted }}>{r.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const RiskModal = ({ risk, cars, onSave, onClose }) => {
+  const genId=()=>`RSK-${String(Date.now()).slice(-6)}`;
+  const [form, setForm] = useState(risk || { id:genId(), status:"Open", severity:3, likelihood:3 });
+  const [showMatrix, setShowMatrix] = useState(false);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  const inherentRating = riskRating(Number(form.severity)||1, Number(form.likelihood)||1);
+  const residualRating = riskRating(Number(form.residual_severity||form.severity)||1, Number(form.residual_likelihood||form.likelihood)||1);
+
+  return (
+    <ModalShell title={(risk?"Edit":"New")+" Hazard / Risk"} onClose={onClose} wide>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+        {/* Identification */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.primary, letterSpacing:1, textTransform:"uppercase", marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>1. Hazard Identification</div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Input label="Hazard ID" value={form.id} onChange={e=>set("id",e.target.value)} />
+        </div>
+        <Select label="Category" value={form.category||""} onChange={e=>set("category",e.target.value)}>
+          <option value="">Select…</option>
+          {RISK_CATEGORIES.map(c=><option key={c}>{c}</option>)}
+        </Select>
+        <Input label="Date Identified" type="date" value={form.date_identified||""} onChange={e=>set("date_identified",e.target.value)} />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Hazard Description" value={form.hazard_description||""} onChange={e=>set("hazard_description",e.target.value)} rows={2}/>
+        </div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Potential Consequence" value={form.consequence||""} onChange={e=>set("consequence",e.target.value)} rows={2}/>
+        </div>
+        <Input label="Identified By" value={form.identified_by||""} onChange={e=>set("identified_by",e.target.value)} />
+        <Select label="Linked CAR (optional)" value={form.linked_car_id||""} onChange={e=>set("linked_car_id",e.target.value)}>
+          <option value="">None</option>
+          {cars.map(c=><option key={c.id} value={c.id}>{c.id}</option>)}
+        </Select>
+
+        {/* Inherent Risk */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.yellow, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>2. Inherent Risk (Before Controls)</div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <button onClick={()=>setShowMatrix(p=>!p)} style={{ background:T.primaryLt, border:`1px solid ${T.border}`, borderRadius:6, padding:"6px 14px", fontSize:12, color:T.primary, cursor:"pointer", marginBottom:8 }}>
+            {showMatrix?"Hide":"Show"} 5×5 Risk Matrix
+          </button>
+          {showMatrix&&<RiskMatrix severity={Number(form.severity)} likelihood={Number(form.likelihood)} onSelect={(s,l)=>{set("severity",s);set("likelihood",l);}} />}
+        </div>
+        <Select label="Severity" value={String(form.severity||3)} onChange={e=>set("severity",Number(e.target.value))}>
+          {RISK_SEVERITY.map(s=><option key={s.value} value={s.value}>{s.value} — {s.label}</option>)}
+        </Select>
+        <Select label="Likelihood" value={String(form.likelihood||3)} onChange={e=>set("likelihood",Number(e.target.value))}>
+          {RISK_LIKELIHOOD.map(l=><option key={l.value} value={l.value}>{l.value} — {l.label}</option>)}
+        </Select>
+        <div style={{ gridColumn:"1/-1", background:inherentRating.bg, border:`1px solid ${inherentRating.color}44`, borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontWeight:700, color:inherentRating.color, fontSize:22, fontFamily:"'Oxanium',sans-serif" }}>{(Number(form.severity)||1)*(Number(form.likelihood)||1)}</div>
+          <div>
+            <div style={{ fontWeight:700, color:inherentRating.color, fontSize:13 }}>Inherent Risk: {inherentRating.label}</div>
+            <div style={{ fontSize:11, color:T.muted }}>Severity {form.severity} × Likelihood {form.likelihood}</div>
+          </div>
+        </div>
+
+        {/* Controls & Treatment */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.teal, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>3. Risk Controls & Treatment</div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Existing Controls" value={form.existing_controls||""} onChange={e=>set("existing_controls",e.target.value)} rows={2}/>
+        </div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Treatment Action" value={form.treatment_action||""} onChange={e=>set("treatment_action",e.target.value)} rows={2}/>
+        </div>
+        <Input label="Responsible Person" value={form.responsible_person||""} onChange={e=>set("responsible_person",e.target.value)} />
+        <Input label="Target Date" type="date" value={form.target_date||""} onChange={e=>set("target_date",e.target.value)} />
+
+        {/* Residual Risk */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.green, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>4. Residual Risk (After Controls)</div>
+        <Select label="Residual Severity" value={String(form.residual_severity||form.severity||3)} onChange={e=>set("residual_severity",Number(e.target.value))}>
+          {RISK_SEVERITY.map(s=><option key={s.value} value={s.value}>{s.value} — {s.label}</option>)}
+        </Select>
+        <Select label="Residual Likelihood" value={String(form.residual_likelihood||form.likelihood||3)} onChange={e=>set("residual_likelihood",Number(e.target.value))}>
+          {RISK_LIKELIHOOD.map(l=><option key={l.value} value={l.value}>{l.value} — {l.label}</option>)}
+        </Select>
+        <div style={{ gridColumn:"1/-1", background:residualRating.bg, border:`1px solid ${residualRating.color}44`, borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontWeight:700, color:residualRating.color, fontSize:22, fontFamily:"'Oxanium',sans-serif" }}>{(Number(form.residual_severity||form.severity)||1)*(Number(form.residual_likelihood||form.likelihood)||1)}</div>
+          <div>
+            <div style={{ fontWeight:700, color:residualRating.color, fontSize:13 }}>Residual Risk: {residualRating.label}</div>
+            <div style={{ fontSize:11, color:T.muted }}>After controls applied</div>
+          </div>
+        </div>
+
+        {/* Status */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.muted, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>5. Review & Status</div>
+        <Select label="Status" value={form.status||"Open"} onChange={e=>set("status",e.target.value)}>
+          {["Open","Under Treatment","Monitoring","Closed"].map(s=><option key={s}>{s}</option>)}
+        </Select>
+        <Input label="Review Date" type="date" value={form.review_date||""} onChange={e=>set("review_date",e.target.value)} />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Review Notes" value={form.review_notes||""} onChange={e=>set("review_notes",e.target.value)} rows={2}/>
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:12 }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn onClick={()=>{
+          const rs=Number(form.residual_severity||form.severity)||1;
+          const rl=Number(form.residual_likelihood||form.likelihood)||1;
+          const is=Number(form.severity)||1; const il=Number(form.likelihood)||1;
+          onSave({...form,
+            inherent_index:is*il, inherent_rating:riskRating(is,il).label,
+            residual_index:rs*rl, residual_rating:riskRating(rs,rl).label,
+          });
+          onClose();
+        }}>Save Risk</Btn>
+      </div>
+    </ModalShell>
+  );
+};
+
+const RiskRegisterView = ({ data, user, profile, managers, onRefresh, showToast }) => {
+  const [modal, setModal]     = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [filter, setFilter]   = useState("all");
+  const [catFilter, setCat]   = useState("all");
+  const [search, setSearch]   = useState("");
+  const [showMatrix, setShowMatrix] = useState(false);
+
+  const canEdit   = ["admin","quality_manager","quality_auditor"].includes(profile?.role);
+  const isAdmin   = profile?.role==="admin";
+
+  const risks = (data.risks||[])
+    .filter(r=>filter==="all"||r.residual_rating===filter)
+    .filter(r=>catFilter==="all"||r.category===catFilter)
+    .filter(r=>!search||JSON.stringify(r).toLowerCase().includes(search.toLowerCase()));
+
+  const stats = {
+    total:    (data.risks||[]).length,
+    critical: (data.risks||[]).filter(r=>r.residual_rating==="Critical"&&r.status!=="Closed").length,
+    high:     (data.risks||[]).filter(r=>r.residual_rating==="High"&&r.status!=="Closed").length,
+    open:     (data.risks||[]).filter(r=>r.status==="Open").length,
+    closed:   (data.risks||[]).filter(r=>r.status==="Closed").length,
+  };
+
+  const save = async(form) => {
+    const isNew=!(data.risks||[]).find(r=>r.id===form.id);
+    const payload={...form, updated_at:new Date().toISOString()};
+    if(isNew) payload.created_at=new Date().toISOString();
+    const{error}=await supabase.from(TABLES.risks).upsert(payload);
+    if(error){showToast(`Error: ${error.message}`,"error");return;}
+    await logChange({user,action:isNew?"created risk":"updated risk",table:"risk_register",recordId:form.id,recordTitle:form.hazard_description?.slice(0,60)||form.id,newData:form});
+    showToast(isNew?"Risk added":"Risk updated","success");
+    onRefresh();
+  };
+
+  const del = async(r) => {
+    if(!window.confirm(`Delete risk ${r.id}?`)) return;
+    await supabase.from(TABLES.risks).delete().eq("id",r.id);
+    showToast("Risk deleted","success"); onRefresh();
+  };
+
+  const ratingColors={Critical:"#b71c1c",High:"#e65100",Medium:"#f57f17",Low:"#2e7d32"};
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+
+      {/* KPI strip */}
+      <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+        {[
+          {label:"Total Hazards",  value:stats.total,    color:T.primary, icon:"⚠️"},
+          {label:"Critical Risks", value:stats.critical, color:"#b71c1c",  icon:"🔴"},
+          {label:"High Risks",     value:stats.high,     color:"#e65100",  icon:"🟠"},
+          {label:"Open",           value:stats.open,     color:T.yellow,   icon:"📋"},
+          {label:"Closed",         value:stats.closed,   color:T.green,    icon:"✅"},
+        ].map(k=>(
+          <div key={k.label} className="card" style={{ flex:1, minWidth:120, padding:"16px 18px", borderTop:`3px solid ${k.color}` }}>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:28, fontFamily:"'Oxanium',sans-serif", fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
+                <div style={{ fontSize:11, color:T.text, fontWeight:600, marginTop:4 }}>{k.label}</div>
+              </div>
+              <span style={{ fontSize:20, opacity:0.6 }}>{k.icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 5×5 Matrix toggle */}
+      <div className="card" style={{ padding:"14px 18px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:showMatrix?14:0 }}>
+          <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:700, fontSize:14, color:T.primaryDk }}>ICAO SMS 5×5 Risk Matrix</div>
+          <Btn size="sm" variant="ghost" onClick={()=>setShowMatrix(p=>!p)}>{showMatrix?"Hide Matrix":"Show Matrix"}</Btn>
+        </div>
+        {showMatrix&&<RiskMatrix />}
+      </div>
+
+      {/* Toolbar */}
+      <SectionHeader title="Hazard & Risk Register" subtitle="ICAO SMS Annex 19 — Identify, assess and treat operational hazards"
+        action={canEdit&&<Btn size="sm" onClick={()=>{setEditing(null);setModal(true)}}>+ Add Hazard</Btn>}
+      />
+      <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:4 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search risks…"
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 14px", fontSize:12, width:220, color:T.text }} />
+        <select value={filter} onChange={e=>setFilter(e.target.value)}
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 12px", fontSize:12, color:T.text }}>
+          <option value="all">All Ratings</option>
+          {["Critical","High","Medium","Low"].map(r=><option key={r}>{r}</option>)}
+        </select>
+        <select value={catFilter} onChange={e=>setCat(e.target.value)}
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 12px", fontSize:12, color:T.text }}>
+          <option value="all">All Categories</option>
+          {RISK_CATEGORIES.map(c=><option key={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {/* Risk table */}
+      <div className="card" style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:"#f5f8fc" }}>
+              {[["Risk ID","mono"],["Category",""],["Hazard Description","wrap"],["Inherent",""],["Residual",""],["Status",""],["Responsible",""],["Target Date","due"],["Linked CAR",""]].map(([label])=>(
+                <th key={label} style={{ padding:"10px 14px", textAlign:"left", color:T.muted, fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase", borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{label}</th>
+              ))}
+              {(canEdit||isAdmin)&&<th style={{ padding:"10px 14px", borderBottom:`1px solid ${T.border}`, width:100 }}/>}
+            </tr>
+          </thead>
+          <tbody>
+            {risks.length===0
+              ? <tr><td colSpan={10} style={{ padding:32, textAlign:"center", color:T.muted }}>No risks found — click "+ Add Hazard" to begin</td></tr>
+              : risks.map(r=>{
+                const ir=riskRating(r.inherent_index?Math.round(Math.sqrt(r.inherent_index)):Number(r.severity)||1, r.inherent_index?Math.round(r.inherent_index/(Math.round(Math.sqrt(r.inherent_index))||1)):Number(r.likelihood)||1);
+                const rr={label:r.residual_rating||"Low",color:ratingColors[r.residual_rating]||T.green,bg:(riskRating(Number(r.residual_severity||r.severity)||1,Number(r.residual_likelihood||r.likelihood)||1)).bg};
+                const od=r.target_date&&r.status!=="Closed"&&isOverdue(r.target_date);
+                return (
+                  <tr key={r.id} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od?"#fff8f8":"" }}>
+                    <td style={{ padding:"10px 14px" }}><span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{r.id}</span></td>
+                    <td style={{ padding:"10px 14px", fontSize:12, color:T.muted }}>{r.category||"—"}</td>
+                    <td style={{ padding:"10px 14px", maxWidth:220 }}><span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.hazard_description}>{r.hazard_description||"—"}</span></td>
+                    <td style={{ padding:"10px 14px" }}>
+                      <span style={{ background:(riskRating(Number(r.severity)||1,Number(r.likelihood)||1)).bg, color:(riskRating(Number(r.severity)||1,Number(r.likelihood)||1)).color, padding:"2px 8px", borderRadius:4, fontSize:11, fontWeight:600 }}>
+                        {r.inherent_index||((Number(r.severity)||1)*(Number(r.likelihood)||1))} — {r.inherent_rating||(riskRating(Number(r.severity)||1,Number(r.likelihood)||1)).label}
+                      </span>
+                    </td>
+                    <td style={{ padding:"10px 14px" }}>
+                      <span style={{ background:rr.bg, color:rr.color, padding:"2px 8px", borderRadius:4, fontSize:11, fontWeight:600 }}>
+                        {r.residual_index||((Number(r.residual_severity||r.severity)||1)*(Number(r.residual_likelihood||r.likelihood)||1))} — {r.residual_rating||"—"}
+                      </span>
+                    </td>
+                    <td style={{ padding:"10px 14px" }}><Badge label={r.status||"Open"}/></td>
+                    <td style={{ padding:"10px 14px", fontSize:12, color:T.muted }}>{r.responsible_person||"—"}</td>
+                    <td style={{ padding:"10px 14px" }}><span style={{ color:od?T.red:T.muted, fontWeight:od?600:400, fontSize:12 }}>{fmt(r.target_date)}{od?" ⚠":""}</span></td>
+                    <td style={{ padding:"10px 14px" }}>
+                      {r.linked_car_id
+                        ? <span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11 }}>{r.linked_car_id}</span>
+                        : <span style={{ color:T.light, fontSize:11 }}>—</span>}
+                    </td>
+                    {(canEdit||isAdmin)&&(
+                      <td style={{ padding:"10px 14px" }}>
+                        <div style={{ display:"flex", gap:5 }}>
+                          {canEdit&&<Btn size="sm" variant="ghost" onClick={()=>{setEditing(r);setModal(true)}}>Edit</Btn>}
+                          {isAdmin&&<Btn size="sm" variant="danger" onClick={()=>del(r)} style={{ padding:"4px 10px", fontSize:11 }}>✕</Btn>}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+
+      {modal&&<RiskModal risk={editing} cars={data.cars||[]} onSave={save} onClose={()=>{setModal(false);setEditing(null);}}/>}
+    </div>
+  );
+};
+
 // ─── TABS ─────────────────────────────────────────────────────
 const TABS = [
   {id:"dashboard",    label:"Dashboard",       icon:"▦",  group:"main"},
@@ -1593,6 +2118,7 @@ const TABS = [
   {id:"flightdocs",   label:"Flight School Docs",icon:"🏫",group:"main"},
   {id:"audits",       label:"Audits",          icon:"🔍", group:"main"},
   {id:"contractors",  label:"Contractors",     icon:"🔧", group:"main"},
+  {id:"risks",        label:"Risk Register",   icon:"⚠️", group:"main"},
   {id:"managers",     label:"Managers",        icon:"👥", group:"settings"},
   {id:"changelog",    label:"Change Log",      icon:"📋", group:"settings"},
 ];
@@ -1602,7 +2128,7 @@ export default function App() {
   const [user,setUser]         = useState(null);
   const [profile,setProfile]   = useState(null);
   const [managers,setManagers] = useState([]);
-  const [data,setData]         = useState({cars:[],caps:[],verifications:[],documents:[],flightDocs:[],audits:[],contractors:[],changeLog:[]});
+  const [data,setData]         = useState({cars:[],caps:[],verifications:[],documents:[],flightDocs:[],audits:[],contractors:[],changeLog:[],risks:[]});
   const [activeTab,setTab]     = useState("dashboard");
   const [toast,setToast]       = useState(null);
   const [loading,setLoading]   = useState(true);
@@ -1622,7 +2148,7 @@ export default function App() {
 
   const loadAll = useCallback(async()=>{
     if(!user)return;
-    const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof]=await Promise.all([
+    const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof,risks]=await Promise.all([
       supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
       supabase.from(TABLES.caps).select("*"),
       supabase.from(TABLES.verifications).select("*"),
@@ -1633,11 +2159,12 @@ export default function App() {
       supabase.from(TABLES.changeLog).select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from(TABLES.managers).select("*").order("id"),
       supabase.from(TABLES.profiles).select("*").eq("id",user.id).single(),
+      supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
     ]);
     setData({
       cars:cars.data||[],caps:caps.data||[],verifications:verifs.data||[],
       documents:docs.data||[],flightDocs:fdocs.data||[],audits:audits.data||[],
-      contractors:contractors.data||[],changeLog:logs.data||[],
+      contractors:contractors.data||[],changeLog:logs.data||[],risks:risks.data||[],
     });
     setManagers(mgrs.data||[]);
     setProfile(prof.data);
@@ -1648,7 +2175,7 @@ export default function App() {
 
   useEffect(()=>{
     if(!user||loading)return;
-    const tables=["cars","caps","capa_verifications","documents","flight_school_docs","audits","contractors","change_log"];
+    const tables=["cars","caps","capa_verifications","documents","flight_school_docs","audits","contractors","change_log","risk_register"];
     subs.current=tables.map(t=>
       supabase.channel(`rt-${t}`).on("postgres_changes",{event:"*",schema:"public",table:t},()=>loadAll()).subscribe()
     );
@@ -1774,6 +2301,7 @@ export default function App() {
           {activeTab==="flightdocs" && <GenericPage title="Flight School Documents" subtitle="Approvals, certificates and regulatory documents" table="flight_school_docs" columns={FLIGHT_DOC_COLS} modalFields={FLIGHT_DOC_FIELDS} modalTitle="Flight School Document" modalDefaults={{status:"Valid",issue_date:today()}} data={{flight_school_docs:data.flightDocs}} canEdit={isQM} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="audits" && <GenericPage title="Audits" subtitle="Internal, external and supplier audits" table="audits" columns={AUDIT_COLS} modalFields={AUDIT_FIELDS} modalTitle="Audit" modalDefaults={{status:"Scheduled",findings:0,obs:0}} data={data} canEdit={isQM} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="contractors" && <GenericPage title="Contractors" subtitle="Approved contractor register" table="contractors" columns={CONTRACTOR_COLS} modalFields={CONTRACTOR_FIELDS} modalTitle="Contractor" modalDefaults={{status:"Approved",rating:"A"}} data={data} canEdit={isAdmin} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="risks"    && <RiskRegisterView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="managers" && <ManagersPage managers={managers} onRefresh={loadAll} showToast={showToast} isAdmin={isAdmin}/>}
           {activeTab==="changelog" && <ChangeLogView logs={data.changeLog}/>}
         </div>
