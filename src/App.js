@@ -268,6 +268,44 @@ const Dashboard = ({ data }) => {
   const upAudits     = data.audits.filter(a=>a.status==="Scheduled").length;
   const expDocs      = data.flightDocs.filter(d=>isOverdue(d.expiry_date)||isApproaching(d.expiry_date)).length;
 
+  // ── QMS Compliance Score ─────────────────────────────────────
+  // Weighted scoring across 5 pillars (total 100 points)
+  const totalCARs    = data.cars.length;
+  const overdueCARs  = data.cars.filter(c=>isOverdue(c.due_date)&&c.status!=="Closed").length;
+  const criticalOpen = data.cars.filter(c=>c.severity==="Critical"&&c.status!=="Closed").length;
+  const expiredDocs  = data.flightDocs.filter(d=>isOverdue(d.expiry_date)).length;
+  const totalFlDocs  = data.flightDocs.length;
+  const capRate      = totalCARs>0 ? data.caps.filter(c=>c.status==="Complete").length/totalCARs : 1;
+  const closeRate    = totalCARs>0 ? closedCARs/totalCARs : 1;
+  const auditsDone   = data.audits.filter(a=>a.status==="Completed").length;
+  const auditsTotal  = data.audits.length;
+  const contractorOk = data.contractors.filter(c=>["A+","A"].includes(c.rating)).length;
+  const contractorTot= data.contractors.length;
+
+  // Pillar 1 — CAPA Closure Rate (25pts): % of CARs closed
+  const p1 = Math.round(25 * Math.min(closeRate, 1));
+  // Pillar 2 — CAP Compliance (20pts): % of CARs with complete CAPs
+  const p2 = Math.round(20 * Math.min(capRate, 1));
+  // Pillar 3 — No Overdue/Critical (25pts): deduct for each overdue or critical open
+  const p3 = Math.max(0, 25 - (overdueCARs * 5) - (criticalOpen * 8));
+  // Pillar 4 — Document Currency (20pts): deduct for expired docs
+  const p4 = totalFlDocs>0 ? Math.max(0, Math.round(20 * (1 - expiredDocs/totalFlDocs))) : 20;
+  // Pillar 5 — Audit & Contractor Health (10pts)
+  const auditScore  = auditsTotal>0 ? (auditsDone/auditsTotal)*5 : 5;
+  const contScore   = contractorTot>0 ? (contractorOk/contractorTot)*5 : 5;
+  const p5          = Math.round(auditScore + contScore);
+
+  const compScore   = Math.min(100, p1+p2+p3+p4+p5);
+  const scoreColor  = compScore>=90?"#2e7d32":compScore>=75?T.teal:compScore>=60?T.yellow:compScore>=40?"#e65100":T.red;
+  const scoreLabel  = compScore>=90?"Excellent":compScore>=75?"Good":compScore>=60?"Satisfactory":compScore>=40?"Needs Attention":"Critical";
+  const pillars     = [
+    {label:"CAPA Closure",    score:p1, max:25, desc:`${closedCARs}/${totalCARs} CARs closed`},
+    {label:"CAP Compliance",  score:p2, max:20, desc:`${data.caps.filter(c=>c.status==="Complete").length}/${totalCARs} CAPs complete`},
+    {label:"No Overdue/Critical",score:Math.min(p3,25),max:25,desc:`${overdueCARs} overdue · ${criticalOpen} critical open`},
+    {label:"Document Currency",score:p4,max:20, desc:`${totalFlDocs-expiredDocs}/${totalFlDocs} docs current`},
+    {label:"Audit & Contractors",score:p5,max:10,desc:`${auditsDone} audits done · ${contractorOk} approved contractors`},
+  ];
+
   const carsByStatus = [
     {name:"Open",value:openCARs},{name:"In Progress",value:inProgCARs},
     {name:"Pend. Verif.",value:pendVerif},{name:"Closed",value:closedCARs},
@@ -313,6 +351,50 @@ const Dashboard = ({ data }) => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* QMS Compliance Score */}
+      <div className="card" style={{ padding:"20px 24px", borderTop:`4px solid ${scoreColor}`, animation:"fadeIn 0.4s ease" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:24, alignItems:"center" }}>
+          {/* Score dial */}
+          <div style={{ textAlign:"center", minWidth:130 }}>
+            <div style={{ position:"relative", display:"inline-block" }}>
+              <svg width="130" height="130" viewBox="0 0 130 130">
+                {/* Background arc */}
+                <circle cx="65" cy="65" r="54" fill="none" stroke="#eef2f7" strokeWidth="10"/>
+                {/* Score arc — strokeDasharray trick for partial circle */}
+                <circle cx="65" cy="65" r="54" fill="none" stroke={scoreColor} strokeWidth="10"
+                  strokeDasharray={`${(compScore/100)*339.3} 339.3`}
+                  strokeLinecap="round"
+                  transform="rotate(-90 65 65)"
+                  style={{transition:"stroke-dasharray 1s ease"}}/>
+                <text x="65" y="58" textAnchor="middle" style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:28,fill:scoreColor}}>{compScore}</text>
+                <text x="65" y="72" textAnchor="middle" style={{fontFamily:"'Oxanium',sans-serif",fontWeight:600,fontSize:11,fill:"#5f7285"}}>/100</text>
+                <text x="65" y="86" textAnchor="middle" style={{fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,fontSize:10,fill:scoreColor}}>{scoreLabel.toUpperCase()}</text>
+              </svg>
+            </div>
+            <div style={{ fontSize:12, fontWeight:700, color:T.text, marginTop:2 }}>QMS Compliance Score</div>
+            <div style={{ fontSize:10, color:T.muted, marginTop:2 }}>AS9100D · ISO 9001:2015</div>
+          </div>
+          {/* Pillars */}
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {pillars.map(p=>{
+              const pct=Math.round((p.score/p.max)*100);
+              const pc=pct>=80?"#2e7d32":pct>=60?T.teal:pct>=40?T.yellow:T.red;
+              return (
+                <div key={p.label}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                    <span style={{ fontSize:11, fontWeight:600, color:T.text }}>{p.label}</span>
+                    <span style={{ fontSize:11, color:T.muted }}>{p.score}/{p.max} pts · <span style={{color:T.muted,fontStyle:"italic"}}>{p.desc}</span></span>
+                  </div>
+                  <div style={{ height:7, background:"#eef2f7", borderRadius:4, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${pct}%`, background:pc, borderRadius:4, transition:"width 0.8s ease" }}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Charts */}
