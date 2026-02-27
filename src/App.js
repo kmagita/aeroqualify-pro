@@ -451,8 +451,17 @@ const CAPModal = ({ car, cap, onSave, onClose }) => {
       <Textarea label="Preventive Action" rows={3} value={form.preventive_action||""} onChange={e=>set("preventive_action",e.target.value)} />
       <div style={{ marginBottom:14 }}>
         <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:4 }}>Evidence of Closure</label>
-        <input type="file" onChange={e=>setFile(e.target.files[0])} style={{ fontSize:13, color:T.text }} />
-        {form.evidence_filename&&<div style={{ fontSize:12, color:T.green, marginTop:4 }}>✓ {form.evidence_filename} already uploaded</div>}
+        <input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+          onChange={e=>{const f=e.target.files[0]; setFile(f); if(f) console.log("File selected:",f.name,f.size,f.type);}}
+          style={{ display:"block", width:"100%", fontSize:13, color:T.text, background:T.bg, border:`1px solid ${T.border}`, borderRadius:6, padding:"8px 10px" }} />
+        {file&&<div style={{ fontSize:12, color:T.primary, marginTop:6, background:T.primaryLt, borderRadius:6, padding:"6px 10px" }}>
+          📎 Ready to upload: <strong>{file.name}</strong> ({(file.size/1024).toFixed(1)} KB)
+        </div>}
+        {!file&&form.evidence_filename&&<div style={{ fontSize:12, color:T.green, marginTop:6, background:T.greenLt, borderRadius:6, padding:"6px 10px" }}>
+          ✓ Previously uploaded: <strong>{form.evidence_filename}</strong>
+          {form.evidence_url&&<a href={form.evidence_url} target="_blank" rel="noreferrer" style={{ marginLeft:8, color:T.primary }}>View</a>}
+        </div>}
+        {!file&&!form.evidence_filename&&<div style={{ fontSize:11, color:T.muted, marginTop:4 }}>Accepted: images, PDF, Word, Excel</div>}
       </div>
       {allFilled&&<div style={{ background:T.greenLt, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:14 }}>✓ All fields complete — CAR will be set to <strong>Pending Verification</strong> upon save.</div>}
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -741,18 +750,44 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
 
   const saveCap = async(form, file) => {
     let evidence_url=form.evidence_url, evidence_filename=form.evidence_filename;
+
     if(file){
-      const path=`evidence/${selected.id}/${file.name}`;
-      const{data:up,error:ue}=await supabase.storage.from("capa-evidence").upload(path,file,{upsert:true});
-      if(!ue){
-        const{data:url}=supabase.storage.from("capa-evidence").getPublicUrl(path);
-        evidence_url=url.publicUrl; evidence_filename=file.name;
+      // ── Step 1: Try Supabase storage upload ──
+      try {
+        // Ensure bucket exists (create if missing)
+        await supabase.storage.createBucket("capa-evidence",{public:true}).catch(()=>{});
+        const path=`evidence/${selected.id}/${Date.now()}_${file.name}`;
+        const{error:ue}=await supabase.storage.from("capa-evidence").upload(path,file,{upsert:true,contentType:file.type});
+        if(!ue){
+          const{data:urlData}=supabase.storage.from("capa-evidence").getPublicUrl(path);
+          evidence_url=urlData.publicUrl;
+          evidence_filename=file.name;
+          showToast(`Evidence uploaded: ${file.name}`,"success");
+        } else {
+          // ── Step 2: Storage failed — fall back to base64 inline ──
+          console.warn("Storage upload failed:",ue.message,"— falling back to base64");
+          const reader=new FileReader();
+          evidence_url=await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result);reader.onerror=rej;reader.readAsDataURL(file);});
+          evidence_filename=file.name;
+          showToast(`Evidence saved (inline): ${file.name}`,"success");
+        }
+      } catch(storageErr){
+        console.warn("Storage error:",storageErr,"— falling back to base64");
+        try {
+          const reader=new FileReader();
+          evidence_url=await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result);reader.onerror=rej;reader.readAsDataURL(file);});
+          evidence_filename=file.name;
+          showToast(`Evidence saved (inline): ${file.name}`,"success");
+        } catch(b64Err){
+          showToast("Warning: evidence file could not be saved — proceed without it","error");
+        }
       }
     }
-    const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&(evidence_url||file);
+
+    const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&(evidence_url||form.evidence_url);
     const capPayload={...form,evidence_url,evidence_filename,submitted_by:user.id,submitted_by_name:profile?.full_name||user.email,submitted_at:new Date().toISOString(),status:allFilled?"Complete":"Pending"};
     const{error}=await supabase.from(TABLES.caps).upsert(capPayload);
-    if(error){showToast(`Error: ${error.message}`,"error");return;}
+    if(error){showToast(`Error saving CAP: ${error.message}`,"error");return;}
     if(allFilled){
       await supabase.from(TABLES.cars).update({status:"Pending Verification",updated_at:new Date().toISOString()}).eq("id",selected.id);
       const qm=managers.find(m=>m.role_title==="Quality Manager");
