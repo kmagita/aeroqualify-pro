@@ -1792,15 +1792,15 @@ const AboutView = () => {
         <div style={{ background:T.primaryLt, borderRadius:8, padding:"16px 18px", marginBottom:16, border:`1px solid ${T.border}` }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.primaryDk, marginBottom:8 }}>Copyright Notice</div>
           <div style={{ fontSize:13, color:T.text, lineHeight:1.8 }}>
-            Copyright &copy; {year} Pegasus Flyers (E.A.) Ltd. All rights reserved.
+            Copyright &copy; {year} Kornelius Magita. All rights reserved.
           </div>
           <div style={{ fontSize:12, color:T.muted, marginTop:10, lineHeight:1.8 }}>
-            AeroQualify Pro and all associated software, source code, design, documentation, workflows, and data structures — including all current and future versions and editions — are the exclusive intellectual property of Pegasus Flyers (E.A.) Ltd. No part of this software may be reproduced, distributed, modified, sublicensed, sold, or transferred to any third party without the express written consent of the copyright holder.
+            AeroQualify Pro and all associated software, source code, design, documentation, workflows, and data structures — including all current and future versions and editions — are the exclusive intellectual property of Kornelius Magita No part of this software may be reproduced, distributed, modified, sublicensed, sold, or transferred to any third party without the express written consent of Kornelius Magita.
           </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           {[
-            { label:"Software Owner",   value:"Pegasus Flyers (E.A.) Ltd." },
+            { label:"Software Owner",   value:"Kornelius Magita" },
             { label:"Rights",           value:"All rights reserved — full copyright" },
             { label:"Jurisdiction",     value:"Republic of Kenya" },
             { label:"Licence Type",     value:"Proprietary — not open source" },
@@ -1882,7 +1882,7 @@ const AboutView = () => {
 
       {/* Footer */}
       <div style={{ textAlign:"center", fontSize:11, color:T.muted, paddingBottom:8 }}>
-        AeroQualify Pro &nbsp;&middot;&nbsp; Copyright &copy; {year} Pegasus Flyers (E.A.) Ltd. All rights reserved. &nbsp;&middot;&nbsp; v3.0.0
+        AeroQualify Pro &nbsp;&middot;&nbsp; Copyright &copy; {year} Kornelius Magita. All rights reserved. &nbsp;&middot;&nbsp; v3.0.0
       </div>
     </div>
   );
