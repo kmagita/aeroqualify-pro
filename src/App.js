@@ -1361,38 +1361,76 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
         const mainPdf=await PDFDocument.load(mainBytes);
         const boldFont=await mainPdf.embedFont(StandardFonts.HelveticaBold);
         const normFont=await mainPdf.embedFont(StandardFonts.Helvetica);
+        const dark=rgb(0.1,0.14,0.2);
+        const white=rgb(1,1,1);
+        const light=rgb(0.78,0.82,0.86);
+        const muted=rgb(0.63,0.71,0.78);
+
+        // ── Pass 1: add all pages to mainPdf, track page ranges ──
+        // Structure: [{pageIndex, fileIndex, fileTotal, fileName, carId, evPageNum, evPageTotal}]
+        const evidencePageMeta=[];
 
         for(const q of window._pdfMergeQueue){
           // Divider page
-          const divPage=mainPdf.addPage([595,842]);
-          divPage.drawRectangle({x:0,y:794,width:595,height:48,color:rgb(0.1,0.14,0.2)});
-          divPage.drawText(`EVIDENCE OF CLOSURE — File ${q.index} of ${q.total}`,{x:14,y:826,size:12,font:boldFont,color:rgb(1,1,1)});
-          divPage.drawText(q.name,{x:14,y:810,size:8,font:normFont,color:rgb(0.78,0.82,0.86)});
-          divPage.drawText(`CAR: ${q.carId}  |  Evidence of Closure`,{x:14,y:800,size:7,font:normFont,color:rgb(0.63,0.71,0.78)});
-          // Footer on divider
-          divPage.drawRectangle({x:0,y:0,width:595,height:25,color:rgb(0.1,0.14,0.2)});
-          divPage.drawText(`EVIDENCE OF CLOSURE  |  File ${q.index} of ${q.total}  |  ${q.name}`,{x:14,y:10,size:7,font:boldFont,color:rgb(0.78,0.82,0.86)});
+          mainPdf.addPage([595,842]);
+          evidencePageMeta.push({pageIndex:mainPdf.getPageCount()-1,isDivider:true,
+            fileIndex:q.index,fileTotal:q.total,fileName:q.name,carId:q.carId});
 
-          // Copy evidence PDF pages — stamp each with header + footer
+          // Evidence pages
           const evPdf=await PDFDocument.load(q.bytes);
           const evPageCount=evPdf.getPageCount();
           const copied=await mainPdf.copyPages(evPdf,Array.from({length:evPageCount},(_,i)=>i));
           copied.forEach((pg,pi)=>{
             mainPdf.addPage(pg);
-            const {width,height}=pg.getSize();
-            // Header stamp on each evidence page
-            pg.drawRectangle({x:0,y:height-18,width,height:18,color:rgb(0.1,0.14,0.2)});
-            pg.drawText(`EVIDENCE OF CLOSURE — File ${q.index} of ${q.total}`,{x:14,y:height-10,size:9,font:boldFont,color:rgb(1,1,1)});
-            pg.drawText(q.name,{x:width-14,y:height-10,size:7,font:normFont,color:rgb(0.78,0.82,0.86),maxWidth:200});
-            pg.drawText(`CAR: ${q.carId}  |  Page ${pi+1} of ${evPageCount}`,{x:14,y:height-16,size:6,font:normFont,color:rgb(0.63,0.71,0.78)});
-            // Footer stamp on each evidence page
-            pg.drawRectangle({x:0,y:0,width,height:18,color:rgb(0.1,0.14,0.2)});
-            pg.drawText(`EVIDENCE OF CLOSURE  |  File ${q.index} of ${q.total}  |  ${q.name}`,{x:14,y:7,size:6,font:boldFont,color:rgb(0.78,0.82,0.86)});
-            const totalDocPages=mainPdf.getPageCount();
-            pg.drawText(`Page ${totalDocPages} of ?`,{x:width-50,y:7,size:6,font:normFont,color:rgb(0.78,0.82,0.86)});
+            evidencePageMeta.push({pageIndex:mainPdf.getPageCount()-1,isDivider:false,
+              fileIndex:q.index,fileTotal:q.total,fileName:q.name,carId:q.carId,
+              evPageNum:pi+1,evPageTotal:evPageCount});
           });
         }
         window._pdfMergeQueue=[];
+
+        // ── Pass 2: now we know total page count — stamp every evidence page ──
+        const totalPages=mainPdf.getPageCount();
+        const pages=mainPdf.getPages();
+
+        evidencePageMeta.forEach(meta=>{
+          const pg=pages[meta.pageIndex];
+          const {width,height}=pg.getSize();
+          const docPageNum=meta.pageIndex+1; // 1-based
+
+          if(meta.isDivider){
+            // Full dark divider page
+            pg.drawRectangle({x:0,y:0,width,height,color:rgb(0.08,0.11,0.17)});
+            // Centre label
+            pg.drawRectangle({x:40,y:height/2-30,width:width-80,height:60,color:dark,borderRadius:4});
+            pg.drawText("EVIDENCE OF CLOSURE",{x:width/2-100,y:height/2+12,size:16,font:boldFont,color:white});
+            pg.drawText(`File ${meta.fileIndex} of ${meta.fileTotal}  —  ${meta.fileName}`,
+              {x:width/2-100,y:height/2-4,size:9,font:normFont,color:light,maxWidth:width-80});
+            pg.drawText(`CAR: ${meta.carId}`,{x:width/2-100,y:height/2-18,size:8,font:normFont,color:muted});
+            // Footer
+            pg.drawRectangle({x:0,y:0,width,height:18,color:dark});
+            pg.drawText(`EVIDENCE OF CLOSURE  |  File ${meta.fileIndex} of ${meta.fileTotal}  |  ${meta.fileName}`,
+              {x:14,y:6,size:6,font:boldFont,color:light,maxWidth:width-80});
+            pg.drawText(`Page ${docPageNum} of ${totalPages}`,{x:width-60,y:6,size:6,font:normFont,color:light});
+          } else {
+            // Evidence content page — stamp header + footer over existing content
+            // Header bar
+            pg.drawRectangle({x:0,y:height-16,width,height:16,color:dark});
+            pg.drawText(`EVIDENCE OF CLOSURE  —  File ${meta.fileIndex} of ${meta.fileTotal}`,
+              {x:8,y:height-10,size:8,font:boldFont,color:white});
+            // Filename right-aligned (truncate if long)
+            const fname=meta.fileName.length>40?meta.fileName.slice(0,37)+"…":meta.fileName;
+            pg.drawText(fname,{x:width-8-fname.length*4.2,y:height-10,size:7,font:normFont,color:light});
+            pg.drawText(`CAR: ${meta.carId}  |  Evidence page ${meta.evPageNum} of ${meta.evPageTotal}`,
+              {x:8,y:height-15,size:5.5,font:normFont,color:muted});
+            // Footer bar
+            pg.drawRectangle({x:0,y:0,width,height:14,color:dark});
+            pg.drawText(`EVIDENCE OF CLOSURE  |  File ${meta.fileIndex} of ${meta.fileTotal}  |  ${meta.fileName}`,
+              {x:8,y:5,size:6,font:boldFont,color:light,maxWidth:width-80});
+            pg.drawText(`Page ${docPageNum} of ${totalPages}`,{x:width-60,y:5,size:6,font:normFont,color:light});
+          }
+        });
+
         const merged=await mainPdf.save();
         const url=URL.createObjectURL(new Blob([merged],{type:"application/pdf"}));
         const a=document.createElement("a"); a.href=url; a.download=`CAPA-Report-${car.id}.pdf`;
