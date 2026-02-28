@@ -271,7 +271,7 @@ const Dashboard = ({ data }) => {
   // ── QMS Compliance Score ─────────────────────────────────────
   // Weighted scoring across 5 pillars (total 100 points)
   const totalCARs    = data.cars.length;
-  const overdueCARs  = data.cars.filter(c=>isOverdue(c.due_date)&&c.status!=="Closed").length;
+  const overdueCARs  = data.cars.filter(c=>isOverdue(c.due_date)&&!["Closed","Completed"].includes(c.status)).length;
   const criticalOpen = data.cars.filter(c=>c.severity==="Critical"&&c.status!=="Closed").length;
   const expiredDocs  = data.flightDocs.filter(d=>isOverdue(d.expiry_date)).length;
   const totalFlDocs  = data.flightDocs.length;
@@ -1506,7 +1506,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
             {filtered.length===0
               ? <tr><td colSpan={9} style={{ padding:32, textAlign:"center", color:T.muted }}>No CARs found</td></tr>
               : filtered.map(c=>{
-                const od=isOverdue(c.due_date); const cap=getCAP(c.id); const verif=getVerif(c.id);
+                const od=isOverdue(c.due_date)&&!["Closed","Completed"].includes(c.status); const cap=getCAP(c.id); const verif=getVerif(c.id);
                 return (
                   <tr key={c.id} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od&&c.status!=="Closed"?"#fff8f8":"" }}>
                     <td style={{ padding:"10px 14px", fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{c.id}</td>
@@ -1613,14 +1613,14 @@ const GenericPage = ({ title, subtitle, table, columns, modalFields, modalTitle,
               ? <tr><td colSpan={columns.length+1} style={{ padding:32, textAlign:"center", color:T.muted }}>No records found</td></tr>
               : rows.map((row,i)=>{
                 const due=row.due_date||row.expiry_date||row.next_audit||row.date;
-                const od=isOverdue(due)&&row.status!=="Closed"&&row.status!=="Approved"&&row.status!=="Completed";
+                const DONE=["Closed","Approved","Completed","Cancelled","Expired"]; const od=isOverdue(due)&&!DONE.includes(row.status);
                 return (
                   <tr key={row.id||i} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od?"#fff8f8":"" }}>
                     {columns.map(c=>(
                       <td key={c.key} style={{ padding:"10px 14px", color:T.text, verticalAlign:"middle" }}>
                         {c.badge ? <Badge label={row[c.key]} /> :
                          c.mono  ? <span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{row[c.key]}</span> :
-                         c.due   ? <span style={{ color:od?T.red:isApproaching(due)?T.yellow:T.text, fontWeight:od||isApproaching(due)?600:400 }}>{fmt(row[c.key])}{od?" ⚠":""}</span> :
+                         c.due   ? <span style={{ color:od?T.red:(isApproaching(due)&&!DONE.includes(row.status))?T.yellow:T.text, fontWeight:od||(isApproaching(due)&&!DONE.includes(row.status))?600:400 }}>{fmt(row[c.key])}{od?" ⚠":""}</span> :
                          <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:c.wrap?"normal":"nowrap", maxWidth:240 }}>{row[c.key]||"—"}</span>}
                       </td>
                     ))}
@@ -2279,7 +2279,7 @@ const RiskRegisterView = ({ data, user, profile, managers, onRefresh, showToast 
               : risks.map(r=>{
                 const ir=riskRating(r.inherent_index?Math.round(Math.sqrt(r.inherent_index)):Number(r.severity)||1, r.inherent_index?Math.round(r.inherent_index/(Math.round(Math.sqrt(r.inherent_index))||1)):Number(r.likelihood)||1);
                 const rr={label:r.residual_rating||"Low",color:ratingColors[r.residual_rating]||T.green,bg:(riskRating(Number(r.residual_severity||r.severity)||1,Number(r.residual_likelihood||r.likelihood)||1)).bg};
-                const od=r.target_date&&r.status!=="Closed"&&isOverdue(r.target_date);
+                const od=r.target_date&&!["Closed","Monitoring","Completed"].includes(r.status)&&isOverdue(r.target_date);
                 return (
                   <tr key={r.id} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od?"#fff8f8":"" }}>
                     <td style={{ padding:"10px 14px" }}><span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{r.id}</span></td>
@@ -2408,15 +2408,16 @@ export default function App() {
   const canEdit  = ["admin","quality_manager","quality_auditor","manager"].includes(profile?.role);
 
   const alertItems = [
-    ...data.cars.filter(c=>c.status!=="Closed"&&(isOverdue(c.due_date)||isApproaching(c.due_date))).map(c=>({id:c.id,due:c.due_date})),
-    ...data.flightDocs.filter(d=>d.status!=="Expired"&&(isOverdue(d.expiry_date)||isApproaching(d.expiry_date))).map(d=>({id:d.id,due:d.expiry_date})),
-    ...data.audits.filter(a=>a.status==="Scheduled"&&isApproaching(a.date)).map(a=>({id:a.id,due:a.date})),
+    ...data.cars.filter(c=>!["Closed","Completed"].includes(c.status)&&(isOverdue(c.due_date)||isApproaching(c.due_date))).map(c=>({id:c.id,due:c.due_date})),
+    ...data.flightDocs.filter(d=>!["Expired","Approved"].includes(d.status)&&(isOverdue(d.expiry_date)||isApproaching(d.expiry_date))).map(d=>({id:d.id,due:d.expiry_date})),
+    ...data.audits.filter(a=>a.status==="Scheduled"&&isOverdue(a.date)).map(a=>({id:a.id,due:a.date})),
+    ...(data.risks||[]).filter(r=>!["Closed","Monitoring"].includes(r.status)&&isOverdue(r.target_date)).map(r=>({id:r.id,due:r.target_date})),
   ];
 
   const counts = {
     cars:      data.cars.filter(c=>["Open","In Progress"].includes(c.status)).length,
-    flightdocs:data.flightDocs.filter(d=>isApproaching(d.expiry_date)||isOverdue(d.expiry_date)).length,
-    audits:    data.audits.filter(a=>a.status==="Scheduled"&&isApproaching(a.date)).length,
+    flightdocs:data.flightDocs.filter(d=>!["Expired","Approved"].includes(d.status)&&(isApproaching(d.expiry_date)||isOverdue(d.expiry_date))).length,
+    audits:    data.audits.filter(a=>a.status==="Scheduled"&&isOverdue(a.date)).length,
   };
 
   if(!user) return <LoginScreen onLogin={setUser}/>;
