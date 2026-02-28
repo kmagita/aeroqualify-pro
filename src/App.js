@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
 import { supabase, TABLES, logChange, sendNotification } from "./supabase";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
@@ -2357,6 +2358,7 @@ export default function App() {
   const [toast,setToast]       = useState(null);
   const [loading,setLoading]   = useState(true);
   const subs                   = useRef([]);
+  const dataLoaded              = useRef(false);
 
   const showToast = useCallback((msg,type="success")=>setToast({message:msg,type}),[]);
 
@@ -2372,38 +2374,31 @@ export default function App() {
 
   const loadAll = useCallback(async()=>{
     if(!user)return;
-    try{
-      // ── Critical path first: auth + core operational data ──
-      // Load profile immediately so UI can render, then load the rest in parallel
-      const profRes = await supabase.from(TABLES.profiles).select("*").eq("id",user.id).single();
-      setProfile(profRes.data);
-      setLoading(false); // Show UI immediately, data loads in behind
-
-      // ── Fetch all tables in parallel -- only select columns needed ──
-      const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,risks]=await Promise.all([
-        supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
-        supabase.from(TABLES.caps).select("*"),
-        supabase.from(TABLES.verifications).select("*"),
-        supabase.from(TABLES.documents).select("*").order("created_at",{ascending:false}),
-        supabase.from(TABLES.flightDocs).select("*").order("expiry_date",{ascending:true}),
-        supabase.from(TABLES.audits).select("*").order("date",{ascending:true}),
-        supabase.from(TABLES.contractors).select("*").order("name",{ascending:true}),
-        supabase.from(TABLES.changeLog).select("id,user_name,action,table_name,record_id,record_title,created_at").order("created_at",{ascending:false}).limit(100),
-        supabase.from(TABLES.managers).select("*").order("id"),
-        supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
-      ]);
-
+    const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof,risks]=await Promise.all([
+      supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
+      supabase.from(TABLES.caps).select("*"),
+      supabase.from(TABLES.verifications).select("*"),
+      supabase.from(TABLES.documents).select("*").order("created_at",{ascending:false}),
+      supabase.from(TABLES.flightDocs).select("*").order("expiry_date",{ascending:true}),
+      supabase.from(TABLES.audits).select("*").order("date",{ascending:true}),
+      supabase.from(TABLES.contractors).select("*").order("name",{ascending:true}),
+      supabase.from(TABLES.changeLog).select("*").order("created_at",{ascending:false}).limit(200),
+      supabase.from(TABLES.managers).select("*").order("id"),
+      supabase.from(TABLES.profiles).select("*").eq("id",user.id).single(),
+      supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
+    ]);
+    // Batch all state updates together to prevent intermediate empty renders
+    flushSync(()=>{
       setData({
         cars:cars.data||[],caps:caps.data||[],verifications:verifs.data||[],
         documents:docs.data||[],flightDocs:fdocs.data||[],audits:audits.data||[],
         contractors:contractors.data||[],changeLog:logs.data||[],
-        risks:risks.error?[]:risks.data||[],
+        risks:risks.data||[],
       });
       setManagers(mgrs.data||[]);
-    } catch(err){
-      console.error("loadAll error:",err);
+      setProfile(prof.data);
       setLoading(false);
-    }
+    });
   },[user]);
 
   useEffect(()=>{ loadAll(); },[loadAll]);
