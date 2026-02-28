@@ -53,7 +53,8 @@ const T = {
 const SM = {
   Open:                  { c:T.red,    bg:T.redLt    },
   "In Progress":         { c:T.yellow, bg:T.yellowLt },
-  "Pending Verification":{ c:T.purple, bg:T.purpleLt },
+  "Pending Verification":    { c:T.purple, bg:T.purpleLt },
+  "Returned for Resubmission":{ c:"#b71c1c", bg:"#ffebee" },
   "Pending":             { c:T.yellow, bg:T.yellowLt },
   Overdue:               { c:T.red,    bg:T.redLt    },
   Closed:                { c:T.green,  bg:T.greenLt  },
@@ -713,7 +714,8 @@ const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
   const steps = [
     { label:"CAR Raised",           done:true,                                  active:car.status==="Open" },
     { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status), active:car.status==="In Progress" },
-    { label:"Pending Verification", done:["Pending Verification","Closed"].includes(car.status), active:car.status==="Pending Verification" },
+    { label:"Pending Verification", done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), active:car.status==="Pending Verification" },
+    { label:"Returned for Resubmission", done:["Returned for Resubmission"].includes(car.status), active:car.status==="Returned for Resubmission", warn:true },
     { label:"Closed",               done:car.status==="Closed",                 active:car.status==="Closed" },
   ];
   const checkItem = (ok, label) => (
@@ -978,14 +980,21 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
   };
 
   const saveVerification = async(form) => {
+    // If QM marks Not Effective, return CAR for resubmission rather than closing
+    const carStatus = form.effectiveness_rating==="Not Effective"
+      ? "Returned for Resubmission"
+      : form.status;
     const payload={...form,verified_by:user.id,verified_by_name:profile?.full_name||user.email,verified_at:new Date().toISOString()};
     const{error}=await supabase.from(TABLES.verifications).upsert(payload);
     if(error){showToast(`Error: ${error.message}`,"error");return;}
-    await supabase.from(TABLES.cars).update({status:form.status,updated_at:new Date().toISOString()}).eq("id",selected.id);
+    await supabase.from(TABLES.cars).update({status:carStatus,updated_at:new Date().toISOString()}).eq("id",selected.id);
     const rm=managers.find(m=>m.role_title===selected.responsible_manager);
     await sendNotification({type:"verification_submitted",record:{...selected,...form},recipients:[rm?.email].filter(Boolean)});
     await logChange({user,action:"verified CAPA",table:"capa_verifications",recordId:form.id,recordTitle:selected.id,newData:form});
-    showToast("Verification submitted — responsible manager notified","success");
+    const toastMsg = form.effectiveness_rating==="Not Effective"
+      ? "CAP returned for resubmission — responsible manager notified"
+      : "Verification submitted — CAR closed";
+    showToast(toastMsg, form.effectiveness_rating==="Not Effective"?"error":"success");
     setModal(null); onRefresh();
   };
 
@@ -1088,7 +1097,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
     doc.text("CAR: "+car.id,margin+4,y+7);
     // status pill — right aligned, text only (avoid roundedRect encoding issues)
-    const sc={Open:[198,40,40],"In Progress":[230,81,0],"Pending Verification":[69,39,160],Closed:[46,125,50],Overdue:[198,40,40]};
+    const sc={Open:[198,40,40],"In Progress":[230,81,0],"Pending Verification":[69,39,160],Closed:[46,125,50],Overdue:[198,40,40],"Returned for Resubmission":[183,28,28]};
     const sCol=sc[car.status]||[95,114,133];
     doc.setFillColor(...sCol); doc.rect(W-margin-34,y+2,32,6,"F");
     doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
@@ -1100,8 +1109,9 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     doc.setDrawColor(221,227,234); doc.rect(margin,y,col,16,"S");
     const steps=[
       {label:"CAR RAISED",done:true},
-      {label:"IN PROGRESS",done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status)},
-      {label:"PENDING VERIFICATION",done:["Pending Verification","Closed"].includes(car.status)},
+      {label:"IN PROGRESS",done:["In Progress","Pending Verification","Closed","Overdue","Returned for Resubmission"].includes(car.status)},
+      {label:"PENDING VERIFICATION",done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status)},
+      {label:"RETURNED — RESUBMIT",done:["Returned for Resubmission"].includes(car.status)},
       {label:"CLOSED",done:car.status==="Closed"},
     ];
     const stepW=col/steps.length;
@@ -1482,7 +1492,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       />
       {/* Filters */}
       <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
-        {["all","Open","In Progress","Pending Verification","Closed","Overdue"].map(f=>(
+        {["all","Open","In Progress","Pending Verification","Returned for Resubmission","Closed","Overdue"].map(f=>(
           <button key={f} onClick={()=>setFilter(f)}
             style={{ padding:"5px 14px", borderRadius:20, border:`1px solid ${filter===f?T.primary:T.border}`, background:filter===f?T.primary:"#fff", color:filter===f?"#fff":T.muted, fontSize:12, fontWeight:filter===f?600:400, cursor:"pointer" }}>
             {f==="all"?"All":f}
@@ -2363,31 +2373,35 @@ export default function App() {
   const loadAll = useCallback(async()=>{
     if(!user)return;
     try{
-      const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof]=await Promise.all([
-        supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
-        supabase.from(TABLES.caps).select("*"),
-        supabase.from(TABLES.verifications).select("*"),
+      // ── Critical path first: auth + core operational data ──
+      // Load profile immediately so UI can render, then load the rest in parallel
+      const profRes = await supabase.from(TABLES.profiles).select("*").eq("id",user.id).single();
+      setProfile(profRes.data);
+      setLoading(false); // Show UI immediately, data loads in behind
+
+      // ── Fetch all tables in parallel — only select columns needed ──
+      const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,risks]=await Promise.all([
+        supabase.from(TABLES.cars).select("id,status,severity,department,due_date,date_raised,finding_description,responsible_manager,qms_clause,raised_by_name,created_at").order("created_at",{ascending:false}),
+        supabase.from(TABLES.caps).select("id,car_id,status,root_cause,corrective_action,evidence_url,evidence_filename,evidence_files,responsible_person,completion_date,created_at"),
+        supabase.from(TABLES.verifications).select("id,car_id,status,effectiveness_rating,verified_by,verification_date,comments,created_at"),
         supabase.from(TABLES.documents).select("*").order("created_at",{ascending:false}),
         supabase.from(TABLES.flightDocs).select("*").order("expiry_date",{ascending:true}),
         supabase.from(TABLES.audits).select("*").order("date",{ascending:true}),
         supabase.from(TABLES.contractors).select("*").order("name",{ascending:true}),
-        supabase.from(TABLES.changeLog).select("*").order("created_at",{ascending:false}).limit(200),
+        supabase.from(TABLES.changeLog).select("id,user_name,action,table_name,record_id,record_title,created_at").order("created_at",{ascending:false}).limit(100),
         supabase.from(TABLES.managers).select("*").order("id"),
-        supabase.from(TABLES.profiles).select("*").eq("id",user.id).single(),
+        supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}).catch(()=>({data:[],error:true})),
       ]);
-      // Risk register loaded separately — gracefully handles missing table
-      const risksRes = await supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false});
+
       setData({
         cars:cars.data||[],caps:caps.data||[],verifications:verifs.data||[],
         documents:docs.data||[],flightDocs:fdocs.data||[],audits:audits.data||[],
         contractors:contractors.data||[],changeLog:logs.data||[],
-        risks:risksRes.error?[]:risksRes.data||[],
+        risks:risks.error?[]:risks.data||[],
       });
       setManagers(mgrs.data||[]);
-      setProfile(prof.data);
     } catch(err){
       console.error("loadAll error:",err);
-    } finally {
       setLoading(false);
     }
   },[user]);
