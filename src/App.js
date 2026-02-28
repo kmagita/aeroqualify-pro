@@ -2381,9 +2381,9 @@ export default function App() {
 
       // ── Fetch all tables in parallel — only select columns needed ──
       const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,risks]=await Promise.all([
-        supabase.from(TABLES.cars).select("id,status,severity,department,due_date,date_raised,finding_description,responsible_manager,qms_clause,raised_by_name,created_at").order("created_at",{ascending:false}),
-        supabase.from(TABLES.caps).select("id,car_id,status,root_cause,corrective_action,evidence_url,evidence_filename,evidence_files,responsible_person,completion_date,created_at"),
-        supabase.from(TABLES.verifications).select("id,car_id,status,effectiveness_rating,verified_by,verification_date,comments,created_at"),
+        supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
+        supabase.from(TABLES.caps).select("*"),
+        supabase.from(TABLES.verifications).select("*"),
         supabase.from(TABLES.documents).select("*").order("created_at",{ascending:false}),
         supabase.from(TABLES.flightDocs).select("*").order("expiry_date",{ascending:true}),
         supabase.from(TABLES.audits).select("*").order("date",{ascending:true}),
