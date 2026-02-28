@@ -2390,7 +2390,7 @@ export default function App() {
         supabase.from(TABLES.contractors).select("*").order("name",{ascending:true}),
         supabase.from(TABLES.changeLog).select("id,user_name,action,table_name,record_id,record_title,created_at").order("created_at",{ascending:false}).limit(100),
         supabase.from(TABLES.managers).select("*").order("id"),
-        supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}).catch(()=>({data:[],error:true})),
+        supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
       ]);
 
       setData({
