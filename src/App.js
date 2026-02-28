@@ -425,7 +425,7 @@ const Dashboard = ({ data }) => {
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={carsByStatus} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                {carsByStatus.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]} />)}
+                {carsByStatus.map((e,i)=><Cell key={i} fill={e.name==="Closed"?T.green:e.name==="Open"?T.red:e.name==="In Progress"?T.yellow:T.purple} />)}
               </Pie>
               <Tooltip contentStyle={{fontSize:12,borderRadius:8}} />
               <Legend wrapperStyle={{fontSize:11}} />
