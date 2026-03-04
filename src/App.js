@@ -907,7 +907,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       const{error}=await supabase.from(TABLES.cars).insert(payload);
       if(error){showToast(`Error: ${error.message}`,"error");return;}
       await logChange({user,action:"created",table:"cars",recordId:form.id,recordTitle:form.title||form.id,newData:form});
-      await sendNotification({type:"new_car",record:form,recipients:[form.responsible_manager_email].filter(Boolean)});
+      const carRm=managers.find(m=>m.role_title===form.responsible_manager); await sendNotification({type:"car_raised",record:form,recipients:[carRm?.email].filter(Boolean)});
       showToast("CAR raised -- responsible manager notified","success");
     } else {
       const{error}=await supabase.from(TABLES.cars).update(payload).eq("id",form.id);
@@ -990,11 +990,12 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     if(error){showToast(`Error: ${error.message}`,"error");return;}
     await supabase.from(TABLES.cars).update({status:carStatus,updated_at:new Date().toISOString()}).eq("id",selected.id);
     const rm=managers.find(m=>m.role_title===selected.responsible_manager);
-    await sendNotification({type:"verification_submitted",record:{...selected,...form},recipients:[rm?.email].filter(Boolean)});
     await logChange({user,action:"verified CAPA",table:"capa_verifications",recordId:form.id,recordTitle:selected.id,newData:form});
     const toastMsg = form.effectiveness_rating==="Not Effective"
-      ? "CAP returned for resubmission — responsible manager notified"
-      : "Verification submitted — CAR closed";
+      ? "CAP returned for resubmission -- responsible manager notified"
+      : "Verification submitted -- CAR closed";
+    const notifType = form.effectiveness_rating==="Not Effective" ? "returned_for_resubmission" : "verification_submitted";
+    await sendNotification({type:notifType,record:{...selected,...form},recipients:[rm?.email].filter(Boolean)});
     showToast(toastMsg, form.effectiveness_rating==="Not Effective"?"error":"success");
     setModal(null); onRefresh();
   };
