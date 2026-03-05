@@ -1180,37 +1180,62 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     // ── Progress Tracker ──
     doc.setFillColor(245,248,252); doc.rect(margin,y,col,16,"F");
     doc.setDrawColor(221,227,234); doc.rect(margin,y,col,16,"S");
+    const isReturned = car.status==="Returned for Resubmission";
     const steps=[
-      {label:"CAR RAISED",done:true},
-      {label:"IN PROGRESS",done:["In Progress","Pending Verification","Closed","Overdue","Returned for Resubmission"].includes(car.status)},
-      {label:"PENDING VERIFICATION",done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status)},
-      {label:"RETURNED — RESUBMIT",done:["Returned for Resubmission"].includes(car.status)},
-      {label:"CLOSED",done:car.status==="Closed"},
+      {label:"CAR RAISED",     done:true,  rejected:false},
+      {label:"IN PROGRESS",    done:["In Progress","Pending Verification","Closed","Overdue","Returned for Resubmission"].includes(car.status), rejected:false},
+      {label:"PEND. VERIF.",   done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), rejected:isReturned},
+      {label:"CLOSED",         done:car.status==="Closed", rejected:false},
     ];
     const stepW=col/steps.length;
     steps.forEach((s,i)=>{
       const cx=margin+stepW*i+stepW/2; const cy=y+7;
-      // connector line (drawn before circle so circle overlaps)
+      // connector line
       if(i<steps.length-1){
-        doc.setLineWidth(1.5);
-        doc.setDrawColor(s.done?1:210,s.done?87:210,s.done?155:210);
-        doc.line(cx+5,cy,cx+stepW-5,cy);
+        // Connector between IN PROGRESS (i=1) and PEND. VERIF. (i=2) is red when returned
+        const isReturnConnector = isReturned && i===1;
+        doc.setLineWidth(isReturnConnector?2:1.5);
+        if(isReturnConnector){
+          doc.setDrawColor(198,40,40);
+          doc.line(cx+5,cy,cx+stepW-5,cy);
+          // backward arrow text above line
+          doc.setFont("helvetica","bold"); doc.setFontSize(6);
+          doc.setTextColor(198,40,40);
+          doc.text("<< CAP RETURNED",cx+stepW/2,cy-3,{align:"center"});
+        } else {
+          doc.setDrawColor(s.done?1:210, s.done?87:210, s.done?155:210);
+          doc.line(cx+5,cy,cx+stepW-5,cy);
+        }
       }
-      // filled circle
-      doc.setFillColor(s.done?1:220,s.done?87:230,s.done?155:240);
+      // circle fill — red if rejected step, blue if done, grey if pending
+      if(s.rejected){
+        doc.setFillColor(198,40,40);
+      } else {
+        doc.setFillColor(s.done?1:220, s.done?87:230, s.done?155:240);
+      }
       doc.circle(cx,cy,4,"F");
-      doc.setDrawColor(s.done?1:200,s.done?87:210,s.done?155:220);
+      if(s.rejected){
+        doc.setDrawColor(183,28,28);
+      } else {
+        doc.setDrawColor(s.done?1:200, s.done?87:210, s.done?155:220);
+      }
       doc.setLineWidth(0.5); doc.circle(cx,cy,4,"S");
-      // marker inside circle — use text not unicode
+      // marker inside circle
       doc.setFont("helvetica","bold"); doc.setFontSize(6);
-      doc.setTextColor(s.done?255:150,s.done?255:160,s.done?255:170);
-      doc.text(s.done?"OK":"--",cx,cy+2,{align:"center"});
-      // label below
+      doc.setTextColor(s.done||s.rejected?255:150, 255, s.done&&!s.rejected?255:s.rejected?255:170);
+      doc.text(s.rejected?"X":s.done?"OK":"--",cx,cy+2,{align:"center"});
+      // label below — red if rejected
       doc.setFont("helvetica","bold"); doc.setFontSize(5.5);
-      doc.setTextColor(s.done?1:140,s.done?87:150,s.done?155:160);
+      if(s.rejected){ doc.setTextColor(198,40,40); }
+      else { doc.setTextColor(s.done?1:140, s.done?87:150, s.done?155:160); }
       doc.text(s.label,cx,y+15,{align:"center"});
+      // extra label under rejected step
+      if(s.rejected){
+        doc.setFontSize(4.5); doc.setTextColor(198,40,40);
+        doc.text("RETURNED",cx,y+19,{align:"center"});
+      }
     });
-    y+=20;
+    y+=22;
 
     // Helper: estimate box height without drawing (used for page overflow checks)
     const estBoxH=(value,w)=>{
