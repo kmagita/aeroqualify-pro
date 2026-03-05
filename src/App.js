@@ -2447,10 +2447,25 @@ export default function App() {
       supabase.from(TABLES.profiles).select("*").eq("id",user.id).single(),
       supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
     ]);
+    // Auto-mark overdue CARs — any non-closed CAR past due date becomes Overdue
+    const OPEN_STATUSES = ["Open","In Progress","Pending Verification","Returned for Resubmission","Overdue"];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const processedCars = (cars.data||[]).map(c => {
+      if(!OPEN_STATUSES.includes(c.status)) return c; // already closed/completed
+      if(!c.due_date) return c;
+      const due = new Date(c.due_date); due.setHours(0,0,0,0);
+      if(due < today && c.status !== "Overdue") {
+        // Update DB silently
+        supabase.from(TABLES.cars).update({status:"Overdue",updated_at:new Date().toISOString()}).eq("id",c.id).then(()=>{});
+        return {...c, status:"Overdue"};
+      }
+      return c;
+    });
+
     // Batch all state updates together to prevent intermediate empty renders
     flushSync(()=>{
       setData({
-        cars:cars.data||[],caps:caps.data||[],verifications:verifs.data||[],
+        cars:processedCars,caps:caps.data||[],verifications:verifs.data||[],
         documents:docs.data||[],flightDocs:fdocs.data||[],audits:audits.data||[],
         contractors:contractors.data||[],changeLog:logs.data||[],
         risks:risks.data||[],
