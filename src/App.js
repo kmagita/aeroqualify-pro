@@ -749,11 +749,14 @@ const CAPADetailModal = ({ car, cap, verif, allCaps, allVerifs, onPDF, onClose }
           {/* Progress tracker */}
           {(()=>{
             const isReturned = car.status==="Returned for Resubmission";
+            // Steps: CAR Raised -> In Progress -> Pending Verification -> Closed
+            // When returned: Pending Verification bullet goes red, connector between
+            // In Progress and Pending Verification turns red with backward arrows
             const trackerSteps = [
-              { label:"CAR Raised",           done:true,                                                    color:"#01579b" },
+              { label:"CAR Raised",           done:true,          color:"#01579b" },
               { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color:"#01579b" },
-              { label:"Pending Verification", done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color: isReturned?"#c62828":"#01579b" },
-              { label:"Closed",               done:car.status==="Closed",                                   color:"#2e7d32" },
+              { label:"Pending Verification", done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color:isReturned?"#c62828":"#01579b" },
+              { label:"Closed",               done:car.status==="Closed", color:"#2e7d32" },
             ];
             return (
               <div style={{ marginBottom:24, background:"#f5f8fc", borderRadius:10, padding:"14px 20px" }}>
@@ -766,20 +769,29 @@ const CAPADetailModal = ({ car, cap, verif, allCaps, allVerifs, onPDF, onClose }
                           border:`2px solid ${s.done?s.color:"#dde3ea"}`,
                           display:"flex",alignItems:"center",justifyContent:"center" }}>
                           {s.done
-                            ? <span style={{ color:"#fff",fontSize:14,fontWeight:700 }}>{s.color==="#c62828"?"✕":"✓"}</span>
+                            ? <span style={{ color:"#fff",fontSize:14,fontWeight:700 }}>{(isReturned&&s.label==="Pending Verification")?"✕":"✓"}</span>
                             : <span style={{ width:8,height:8,borderRadius:"50%",background:"#dde3ea",display:"block" }}/>}
                         </div>
                         <div style={{ fontSize:10,fontWeight:600,color:s.done?s.color:T.muted,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
                       </div>
                       {i<trackerSteps.length-1&&(()=>{
-                        const isReturnedConnector = isReturned && i===2;
+                        // Connector between In Progress (i=1) and Pending Verification (i=2) goes red when returned
+                        const isReturnConnector = isReturned && i===1;
+                        const lineColor = isReturnConnector ? "#c62828" : (s.done ? "#01579b" : "#dde3ea");
                         return (
                           <div style={{ flex:1, margin:"0 8px", marginBottom:18, position:"relative" }}>
-                            <div style={{ height:2, background:s.done?(isReturnedConnector?"#c62828":"#01579b"):"#dde3ea", position:"relative", overflow:"visible" }}>
-                              {isReturnedConnector&&(
-                                <div style={{ position:"absolute", top:-18, left:0, right:0, textAlign:"center", fontSize:9, fontWeight:700, color:"#c62828", textTransform:"uppercase", letterSpacing:0.5, whiteSpace:"nowrap" }}>
-                                  &#8592; CAP Returned for Resubmission
-                                </div>
+                            <div style={{ height:3, background:lineColor, borderRadius:2, position:"relative" }}>
+                              {isReturnConnector&&(
+                                <>
+                                  {/* Backward arrows on the line */}
+                                  <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", fontSize:14, color:"#c62828", lineHeight:1 }}>
+                                    &#8678;&#8678;
+                                  </div>
+                                  {/* Label below the line */}
+                                  <div style={{ position:"absolute", top:8, left:0, right:0, textAlign:"center", fontSize:9, fontWeight:700, color:"#c62828", textTransform:"uppercase", letterSpacing:0.5, whiteSpace:"nowrap" }}>
+                                    CAP Returned
+                                  </div>
+                                </>
                               )}
                             </div>
                           </div>
@@ -789,8 +801,8 @@ const CAPADetailModal = ({ car, cap, verif, allCaps, allVerifs, onPDF, onClose }
                   ))}
                 </div>
                 {isReturned&&(
-                  <div style={{ marginTop:10, padding:"8px 14px", background:"#ffebee", borderRadius:6, border:"1px solid #ffcdd2", fontSize:12, color:"#c62828", fontWeight:600, textAlign:"center" }}>
-                    ✕ CAP was reviewed and returned for resubmission — awaiting revised CAP from responsible manager
+                  <div style={{ marginTop:16, padding:"8px 14px", background:"#ffebee", borderRadius:6, border:"1px solid #ffcdd2", fontSize:12, color:"#c62828", fontWeight:600, textAlign:"center" }}>
+                    ✕ CAP reviewed and returned for resubmission — awaiting revised CAP from responsible manager
                   </div>
                 )}
               </div>
