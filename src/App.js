@@ -711,7 +711,7 @@ const PegasusLetterhead = () => (
 );
 
 // ─── CAPA Detail / Progress Modal ────────────────────────────
-const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
+const CAPADetailModal = ({ car, cap, verif, allCaps, allVerifs, onPDF, onClose }) => {
   const steps = [
     { label:"CAR Raised",           done:true,                                  active:car.status==="Open" },
     { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status), active:car.status==="In Progress" },
@@ -747,19 +747,55 @@ const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
           <PegasusLetterhead />
 
           {/* Progress tracker */}
-          <div style={{ display:"flex",alignItems:"center",marginBottom:24,background:"#f5f8fc",borderRadius:10,padding:"14px 20px" }}>
-            {steps.map((s,i)=>(
-              <div key={s.label} style={{ display:"flex",alignItems:"center",flex:i<steps.length-1?1:"auto" }}>
-                <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4 }}>
-                  <div style={{ width:32,height:32,borderRadius:"50%",background:s.done?"#01579b":s.active?"#e3f2fd":"#eef2f7",border:`2px solid ${s.done?"#01579b":s.active?"#01579b":"#dde3ea"}`,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.3s" }}>
-                    {s.done ? <span style={{ color:"#fff",fontSize:14,fontWeight:700 }}>✓</span> : <span style={{ width:8,height:8,borderRadius:"50%",background:s.active?"#01579b":"#dde3ea",display:"block" }}/>}
-                  </div>
-                  <div style={{ fontSize:10,fontWeight:600,color:s.done?"#01579b":T.muted,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+          {(()=>{
+            const isReturned = car.status==="Returned for Resubmission";
+            const trackerSteps = [
+              { label:"CAR Raised",           done:true,                                                    color:"#01579b" },
+              { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color:"#01579b" },
+              { label:"Pending Verification", done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color: isReturned?"#c62828":"#01579b" },
+              { label:"Closed",               done:car.status==="Closed",                                   color:"#2e7d32" },
+            ];
+            return (
+              <div style={{ marginBottom:24, background:"#f5f8fc", borderRadius:10, padding:"14px 20px" }}>
+                <div style={{ display:"flex", alignItems:"center" }}>
+                  {trackerSteps.map((s,i)=>(
+                    <div key={s.label} style={{ display:"flex", alignItems:"center", flex:i<trackerSteps.length-1?1:"auto" }}>
+                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                        <div style={{ width:32,height:32,borderRadius:"50%",
+                          background:s.done?s.color:"#eef2f7",
+                          border:`2px solid ${s.done?s.color:"#dde3ea"}`,
+                          display:"flex",alignItems:"center",justifyContent:"center" }}>
+                          {s.done
+                            ? <span style={{ color:"#fff",fontSize:14,fontWeight:700 }}>{s.color==="#c62828"?"✕":"✓"}</span>
+                            : <span style={{ width:8,height:8,borderRadius:"50%",background:"#dde3ea",display:"block" }}/>}
+                        </div>
+                        <div style={{ fontSize:10,fontWeight:600,color:s.done?s.color:T.muted,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+                      </div>
+                      {i<trackerSteps.length-1&&(()=>{
+                        const isReturnedConnector = isReturned && i===2;
+                        return (
+                          <div style={{ flex:1, margin:"0 8px", marginBottom:18, position:"relative" }}>
+                            <div style={{ height:2, background:s.done?(isReturnedConnector?"#c62828":"#01579b"):"#dde3ea", position:"relative", overflow:"visible" }}>
+                              {isReturnedConnector&&(
+                                <div style={{ position:"absolute", top:-18, left:0, right:0, textAlign:"center", fontSize:9, fontWeight:700, color:"#c62828", textTransform:"uppercase", letterSpacing:0.5, whiteSpace:"nowrap" }}>
+                                  &#8592; CAP Returned for Resubmission
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ))}
                 </div>
-                {i<steps.length-1&&<div style={{ flex:1,height:2,background:s.done?"#01579b":"#dde3ea",margin:"0 8px",marginBottom:18,transition:"background 0.3s" }}/>}
+                {isReturned&&(
+                  <div style={{ marginTop:10, padding:"8px 14px", background:"#ffebee", borderRadius:6, border:"1px solid #ffcdd2", fontSize:12, color:"#c62828", fontWeight:600, textAlign:"center" }}>
+                    ✕ CAP was reviewed and returned for resubmission — awaiting revised CAP from responsible manager
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {/* CAR Details */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
@@ -784,95 +820,112 @@ const CAPADetailModal = ({ car, cap, verif, onPDF, onClose }) => {
             ))}
           </div>
 
-          {/* CAP Section */}
-          <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18,marginBottom:18 }}>
-            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14 }}>
-              <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk }}>Corrective Action Plan (CAP)</div>
-              <Badge label={cap?"Submitted":"Not Submitted"}/>
-            </div>
-            {cap ? (
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-                {[
-                  ["Immediate Corrective Action",cap.immediate_action,true],
-                  ["Root Cause Analysis",cap.root_cause_analysis,true],
-                  ["Corrective Action",cap.corrective_action,true],
-                  ["Preventive Action",cap.preventive_action,true],
-                ].map(([label,val,full])=>(
-                  <div key={label} style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:full?"1/-1":"auto" }}>
-                    <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>{label}</div>
-                    <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{val||"—"}</div>
-                  </div>
-                ))}
-                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:"1/-1" }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8 }}>Evidence of Closure</div>
-                  {(()=>{
-                    let files=[];
-                    try{files=JSON.parse(cap.evidence_files||"[]");}catch{}
-                    if(!cap.evidence_files&&cap.evidence_filename) files=[{name:cap.evidence_filename,url:cap.evidence_url}];
-                    return files.length>0
-                      ? <div style={{ display:"flex",flexDirection:"column",gap:6 }}>
-                          {files.map((f,i)=>(
-                            <div key={i} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:"#e8f5e9",borderRadius:6,padding:"7px 12px" }}>
-                              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                                <span>📎</span>
-                                <span style={{ fontSize:13,color:T.green,fontWeight:600 }}>{f.name}</span>
-                              </div>
-                              {f.url&&!f.url.startsWith("data:")&&
-                                <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize:12,color:T.primary,fontWeight:600 }}>🔗 View</a>}
+          {/* CAP History */}
+          {(()=>{
+            const caps = allCaps&&allCaps.length>0 ? allCaps : (cap?[cap]:[]);
+            return (
+              <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18,marginBottom:18 }}>
+                <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk,marginBottom:14 }}>
+                  Corrective Action Plan History {caps.length>1&&<span style={{ fontSize:12,fontWeight:400,color:T.muted,marginLeft:8 }}>({caps.length} submissions)</span>}
+                </div>
+                {caps.length===0
+                  ? <div style={{ background:"#fff3e0",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.yellow }}>⏳ CAP not yet submitted by the responsible manager.</div>
+                  : caps.map((c,idx)=>{
+                    let files=[]; try{files=JSON.parse(c.evidence_files||"[]");}catch{}
+                    if(!c.evidence_files&&c.evidence_filename) files=[{name:c.evidence_filename,url:c.evidence_url}];
+                    const isRejected = idx < caps.length-1; // all but last are rejected
+                    return (
+                      <div key={c.id||idx} style={{ marginBottom:16,border:`2px solid ${isRejected?"#ffcdd2":"#c8e6c9"}`,borderRadius:10,overflow:"hidden" }}>
+                        <div style={{ padding:"8px 14px",background:isRejected?"#ffebee":"#e8f5e9",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                          <div style={{ fontSize:12,fontWeight:700,color:isRejected?"#c62828":"#2e7d32",textTransform:"uppercase",letterSpacing:0.5 }}>
+                            {caps.length>1?`Submission ${idx+1} of ${caps.length}`:"CAP Submission"} {isRejected&&"— Returned for Resubmission"}
+                          </div>
+                          <div style={{ fontSize:11,color:T.muted }}>{c.submitted_at?new Date(c.submitted_at).toLocaleString():""} · {c.submitted_by_name||"--"}</div>
+                        </div>
+                        <div style={{ padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                          {[["Immediate Corrective Action",c.immediate_action,true],["Root Cause Analysis",c.root_cause_analysis,true],["Corrective Action",c.corrective_action,true],["Preventive Action",c.preventive_action,true]].map(([label,val,full])=>(
+                            <div key={label} style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:full?"1/-1":"auto" }}>
+                              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:4 }}>{label}</div>
+                              <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{val||"--"}</div>
                             </div>
                           ))}
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:"1/-1" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8 }}>Evidence of Closure</div>
+                            {files.length>0
+                              ? <div style={{ display:"flex",flexDirection:"column",gap:6 }}>
+                                  {files.map((f,fi)=>(
+                                    <div key={fi} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:isRejected?"#ffebee":"#e8f5e9",borderRadius:6,padding:"7px 12px" }}>
+                                      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                                        <span>📎</span>
+                                        <span style={{ fontSize:13,color:isRejected?"#c62828":T.green,fontWeight:600 }}>{f.name}</span>
+                                      </div>
+                                      {f.url&&!f.url.startsWith("data:")&&<a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize:12,color:T.primary,fontWeight:600 }}>🔗 View</a>}
+                                    </div>
+                                  ))}
+                                </div>
+                              : <div style={{ fontSize:13,color:T.muted }}>-- No evidence uploaded</div>}
+                          </div>
                         </div>
-                      : <div style={{ fontSize:13,color:T.muted }}>— No evidence uploaded</div>;
-                  })()}
-                </div>
-                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Submitted By</div>
-                  <div style={{ fontSize:13,color:T.text }}>{cap.submitted_by_name||"--"}</div>
-                  <div style={{ fontSize:11,color:T.muted }}>{cap.submitted_at?new Date(cap.submitted_at).toLocaleString():""}</div>
-                </div>
+                      </div>
+                    );
+                  })
+                }
               </div>
-            ) : (
-              <div style={{ background:"#fff3e0",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.yellow }}>⏳ CAP not yet submitted by the responsible manager.</div>
-            )}
-          </div>
+            );
+          })()}
 
-          {/* Verification Section */}
-          <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18 }}>
-            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14 }}>
-              <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk }}>CAPA Verification</div>
-              <Badge label={verif?verif.status:"Not Verified"}/>
-            </div>
-            {verif ? (
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:"1/-1" }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:10 }}>Verification Checklist</div>
-                  {checkItem(verif.immediate_action_ok,"Immediate action was adequate")}
-                  {checkItem(verif.root_cause_ok,"Root cause correctly identified")}
-                  {checkItem(verif.corrective_action_ok,"Corrective action addresses root cause")}
-                  {checkItem(verif.preventive_action_ok,"Preventive action prevents recurrence")}
-                  {checkItem(verif.evidence_ok,"Evidence of closure satisfactory")}
-                  {checkItem(verif.recurrence_prevented,"Recurrence of finding prevented")}
+          {/* Verification History */}
+          {(()=>{
+            const verifs = allVerifs&&allVerifs.length>0 ? allVerifs : (verif?[verif]:[]);
+            return (
+              <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18 }}>
+                <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk,marginBottom:14 }}>
+                  CAPA Verification History {verifs.length>1&&<span style={{ fontSize:12,fontWeight:400,color:T.muted,marginLeft:8 }}>({verifs.length} reviews)</span>}
                 </div>
-                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Effectiveness Rating</div>
-                  <Badge label={verif.effectiveness_rating}/>
-                </div>
-                <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px" }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Verified By</div>
-                  <div style={{ fontSize:13,color:T.text }}>{verif.verified_by_name||"--"}</div>
-                  <div style={{ fontSize:11,color:T.muted }}>{verif.verified_at?new Date(verif.verified_at).toLocaleString():""}</div>
-                </div>
-                {verif.verifier_comments&&(
-                  <div style={{ background:"#f5f8fc",borderRadius:8,padding:"12px 14px",gridColumn:"1/-1" }}>
-                    <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Verifier Comments</div>
-                    <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{verif.verifier_comments}</div>
-                  </div>
-                )}
+                {verifs.length===0
+                  ? <div style={{ background:"#e3f2fd",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.primary }}>⏳ Verification not yet completed by the Quality Manager.</div>
+                  : verifs.map((v,idx)=>{
+                    const isRejection = v.effectiveness_rating==="Not Effective";
+                    return (
+                      <div key={v.id||idx} style={{ marginBottom:16,border:`2px solid ${isRejection?"#ffcdd2":"#c8e6c9"}`,borderRadius:10,overflow:"hidden" }}>
+                        <div style={{ padding:"8px 14px",background:isRejection?"#ffebee":"#e8f5e9",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                          <div style={{ fontSize:12,fontWeight:700,color:isRejection?"#c62828":"#2e7d32",textTransform:"uppercase",letterSpacing:0.5 }}>
+                            {verifs.length>1?`Review ${idx+1} of ${verifs.length}`:"Verification"} — {isRejection?"Returned for Resubmission":"Effective"}
+                          </div>
+                          <div style={{ fontSize:11,color:T.muted }}>{v.verified_at?new Date(v.verified_at).toLocaleString():""} · {v.verified_by_name||"--"}</div>
+                        </div>
+                        <div style={{ padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:"1/-1" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8 }}>Verification Checklist</div>
+                            {checkItem(v.immediate_action_ok,"Immediate action adequate")}
+                            {checkItem(v.root_cause_ok,"Root cause correctly identified")}
+                            {checkItem(v.corrective_action_ok,"Corrective action addresses root cause")}
+                            {checkItem(v.preventive_action_ok,"Preventive action prevents recurrence")}
+                            {checkItem(v.evidence_ok,"Evidence of closure satisfactory")}
+                            {checkItem(v.recurrence_prevented,"Recurrence prevented")}
+                          </div>
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Effectiveness Rating</div>
+                            <Badge label={v.effectiveness_rating}/>
+                          </div>
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Verified By</div>
+                            <div style={{ fontSize:13,color:T.text }}>{v.verified_by_name||"--"}</div>
+                          </div>
+                          {v.verifier_comments&&(
+                            <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:"1/-1" }}>
+                              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Comments</div>
+                              <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{v.verifier_comments}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                }
               </div>
-            ) : (
-              <div style={{ background:"#e3f2fd",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.primary }}>⏳ Verification not yet completed by the Quality Manager.</div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Footer */}
           <div style={{ marginTop:20,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
@@ -965,7 +1018,9 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
 
     const hasEvidence = existingFiles.length>0;
     const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&hasEvidence;
-    const capPayload={...form,evidence_files,evidence_url,evidence_filename,submitted_by:user.id,submitted_by_name:profile?.full_name||user.email,submitted_at:new Date().toISOString(),status:allFilled?"Complete":"Pending"};
+    const isResubmission = selected.status==="Returned for Resubmission";
+    const capId = isResubmission ? `${selected.id}-cap-${Date.now()}` : form.id;
+    const capPayload={...form,id:capId,evidence_files,evidence_url,evidence_filename,submitted_by:user.id,submitted_by_name:profile?.full_name||user.email,submitted_at:new Date().toISOString(),status:allFilled?"Complete":"Pending"};
     const{error}=await supabase.from(TABLES.caps).upsert(capPayload);
     if(error){showToast(`Error saving CAP: ${error.message}`,"error");return;}
     if(allFilled){
@@ -986,8 +1041,9 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     const carStatus = form.effectiveness_rating==="Not Effective"
       ? "Returned for Resubmission"
       : form.status;
-    const payload={...form,verified_by:user.id,verified_by_name:profile?.full_name||user.email,verified_at:new Date().toISOString()};
-    const{error}=await supabase.from(TABLES.verifications).upsert(payload);
+    const verifId = `${selected.id}-verif-${Date.now()}`;
+    const payload={...form,id:verifId,verified_by:user.id,verified_by_name:profile?.full_name||user.email,verified_at:new Date().toISOString()};
+    const{error}=await supabase.from(TABLES.verifications).insert(payload);
     if(error){showToast(`Error: ${error.message}`,"error");return;}
     await supabase.from(TABLES.cars).update({status:carStatus,updated_at:new Date().toISOString()}).eq("id",selected.id);
     const rm=managers.find(m=>m.role_title===selected.responsible_manager);
@@ -1001,8 +1057,10 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     setModal(null); onRefresh();
   };
 
-  const getCAP  = (carId) => data.caps?.find(c=>c.car_id===carId);
-  const getVerif= (carId) => data.verifications?.find(v=>v.car_id===carId);
+  const getCAP      = (carId) => data.caps?.find(c=>c.car_id===carId); // latest
+  const getVerif    = (carId) => data.verifications?.find(v=>v.car_id===carId); // latest
+  const getAllCAPs   = (carId) => (data.caps?.filter(c=>c.car_id===carId)||[]).sort((a,b)=>new Date(a.submitted_at||a.created_at)-new Date(b.submitted_at||b.created_at));
+  const getAllVerifs = (carId) => (data.verifications?.filter(v=>v.car_id===carId)||[]).sort((a,b)=>new Date(a.verified_at||a.created_at)-new Date(b.verified_at||b.created_at));
 
   const generateReport = async(car) => {
     const{jsPDF}=await import("jspdf");
@@ -1560,7 +1618,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       {modal==="car"&&<CARModal car={selected} managers={managers} onSave={saveCar} onClose={()=>setModal(null)} />}
       {modal==="cap"&&selected&&<CAPModal car={selected} cap={getCAP(selected.id)} onSave={saveCap} onClose={()=>setModal(null)} />}
       {modal==="verify"&&selected&&<VerificationModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} onSave={saveVerification} onClose={()=>setModal(null)} />}
-      {modal==="detail"&&selected&&<CAPADetailModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} onPDF={()=>generateReport(selected)} onClose={()=>setModal(null)} />}
+      {modal==="detail"&&selected&&<CAPADetailModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} allCaps={getAllCAPs(selected.id)} allVerifs={getAllVerifs(selected.id)} onPDF={()=>generateReport(selected)} onClose={()=>setModal(null)} />}
     </div>
   );
 };
