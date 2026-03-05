@@ -907,7 +907,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       const{error}=await supabase.from(TABLES.cars).insert(payload);
       if(error){showToast(`Error: ${error.message}`,"error");return;}
       await logChange({user,action:"created",table:"cars",recordId:form.id,recordTitle:form.title||form.id,newData:form});
-      const carRm=managers.find(m=>m.role_title===form.responsible_manager); await sendNotification({type:"car_raised",record:form,recipients:[carRm?.email].filter(Boolean)});
+      const carRm=managers.find(m=>m.role_title===form.responsible_manager); await sendNotification({type:"car_raised",record:form,recipients:[carRm?.email,...(form.additional_notify||[])].filter(Boolean)});
       showToast("CAR raised -- responsible manager notified","success");
     } else {
       const{error}=await supabase.from(TABLES.cars).update(payload).eq("id",form.id);
