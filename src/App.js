@@ -263,18 +263,18 @@ const LoginScreen = ({ onLogin }) => {
 const CHART_COLORS = [T.primary, T.yellow, T.green, T.teal, T.purple, T.red];
 
 const Dashboard = ({ data }) => {
-  const openCARs     = data.cars.filter(c=>c.status==="Open").length;
-  const inProgCARs   = data.cars.filter(c=>c.status==="In Progress").length;
+  const openCARs     = data.cars.filter(c=>["Open","Overdue"].includes(c.status)).length;
+  const inProgCARs   = data.cars.filter(c=>["In Progress","Returned for Resubmission"].includes(c.status)).length;
   const pendVerif    = data.cars.filter(c=>c.status==="Pending Verification").length;
-  const closedCARs   = data.cars.filter(c=>c.status==="Closed").length;
+  const closedCARs   = data.cars.filter(c=>["Closed","Completed"].includes(c.status)).length;
   const upAudits     = data.audits.filter(a=>a.status==="Scheduled").length;
   const expDocs      = data.flightDocs.filter(d=>isOverdue(d.expiry_date)||isApproaching(d.expiry_date)).length;
 
   // ── QMS Compliance Score ─────────────────────────────────────
   // Weighted scoring across 5 pillars (total 100 points)
   const totalCARs    = data.cars.length;
-  const overdueCARs  = data.cars.filter(c=>isOverdue(c.due_date)&&!["Closed","Completed"].includes(c.status)).length;
-  const criticalOpen = data.cars.filter(c=>c.severity==="Critical"&&c.status!=="Closed").length;
+  const overdueCARs  = data.cars.filter(c=>c.status==="Overdue").length;
+  const criticalOpen = data.cars.filter(c=>c.severity==="Critical"&&!["Closed","Completed"].includes(c.status)).length;
   const expiredDocs  = data.flightDocs.filter(d=>isOverdue(d.expiry_date)).length;
   const totalFlDocs  = data.flightDocs.length;
   const capRate      = totalCARs>0 ? data.caps.filter(c=>c.status==="Complete").length/totalCARs : 1;
@@ -316,7 +316,7 @@ const Dashboard = ({ data }) => {
   ];
 
   const carsByStatus = [
-    {name:"Open",value:openCARs},{name:"In Progress",value:inProgCARs},
+    {name:"Open/Overdue",value:openCARs},{name:"In Progress",value:inProgCARs},
     {name:"Pend. Verif.",value:pendVerif},{name:"Closed",value:closedCARs},
   ].filter(d=>d.value>0);
 
@@ -336,7 +336,7 @@ const Dashboard = ({ data }) => {
   });
 
   const kpis = [
-    {label:"Open CARs",     value:openCARs,   color:T.red,    icon:"📋", sub:"Requires action"},
+    {label:"Open CARs",     value:openCARs,   color:T.red,    icon:"📋", sub:overdueCARs>0?`${overdueCARs} overdue`:"Requires action"},
     {label:"In Progress",   value:inProgCARs, color:T.yellow, icon:"🔄", sub:"CAP being completed"},
     {label:"Pend. Verif.",  value:pendVerif,  color:T.purple, icon:"🔍", sub:"Awaiting QM review"},
     {label:"Closed",        value:closedCARs, color:T.green,  icon:"✅", sub:"Verified closed"},
