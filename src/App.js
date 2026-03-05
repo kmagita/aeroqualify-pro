@@ -901,8 +901,8 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
 
   const saveCar = async(form) => {
     const isNew = !data.cars.find(c=>c.id===form.id);
-    const {additional_notify_text:_ant, ...formClean} = form;
-    const payload = {...formClean, title: form.finding_description?.slice(0,80)||form.id, updated_at:new Date().toISOString()};
+    const payload = {...form, title: form.finding_description?.slice(0,80)||form.id, updated_at:new Date().toISOString()};
+    delete payload.additional_notify_text;
     if(isNew) {
       payload.raised_by=user.id; payload.raised_by_name=profile?.full_name||user.email;
       console.log("[saveCar] payload keys:", Object.keys(payload)); console.log("[saveCar] error check:", JSON.stringify(payload));
