@@ -52,7 +52,7 @@ serve(async () => {
     const { data: cars } = await supabase
       .from("cars")
       .select("*")
-      .in("status", ["Open","In Progress","Pending Verification","Returned for Resubmission","Overdue"])
+      .in("status", ["Open","In Progress","Pending Verification","Returned for Resubmission","Overdue"]) // fetch all open
       .not("due_date", "is", null);
 
     if(!cars || cars.length === 0) {
@@ -71,7 +71,7 @@ serve(async () => {
       const rmEmail = rm?.email;
 
       // ── Auto-mark as Overdue ──────────────────────────────
-      if(dueDate < todayStr && car.status !== "Overdue") {
+      if(dueDate < todayStr && ["Open","In Progress"].includes(car.status)) {
         await supabase.from("cars").update({
           status: "Overdue",
           updated_at: new Date().toISOString(),
