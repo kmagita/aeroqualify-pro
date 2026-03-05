@@ -2485,14 +2485,13 @@ export default function App() {
       supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
     ]);
     // Auto-mark overdue CARs — any non-closed CAR past due date becomes Overdue
-    const OPEN_STATUSES = ["Open","In Progress","Pending Verification","Returned for Resubmission","Overdue"];
+    const OVERDUE_ELIGIBLE = ["Open","In Progress"];
     const today = new Date(); today.setHours(0,0,0,0);
     const processedCars = (cars.data||[]).map(c => {
-      if(!OPEN_STATUSES.includes(c.status)) return c; // already closed/completed
+      if(!OVERDUE_ELIGIBLE.includes(c.status)) return c; // only Open/In Progress can become Overdue
       if(!c.due_date) return c;
       const due = new Date(c.due_date); due.setHours(0,0,0,0);
-      if(due < today && c.status !== "Overdue") {
-        // Update DB silently
+      if(due < today) {
         supabase.from(TABLES.cars).update({status:"Overdue",updated_at:new Date().toISOString()}).eq("id",c.id).then(()=>{});
         return {...c, status:"Overdue"};
       }
