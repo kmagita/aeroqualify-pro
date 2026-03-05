@@ -901,7 +901,8 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
 
   const saveCar = async(form) => {
     const isNew = !data.cars.find(c=>c.id===form.id);
-    const payload = {...form, title: form.finding_description?.slice(0,80)||form.id, updated_at:new Date().toISOString()};
+    const {additional_notify_text:_ant, ...formClean} = form;
+    const payload = {...formClean, title: form.finding_description?.slice(0,80)||form.id, updated_at:new Date().toISOString()};
     if(isNew) {
       payload.raised_by=user.id; payload.raised_by_name=profile?.full_name||user.email;
       const{error}=await supabase.from(TABLES.cars).insert(payload);
