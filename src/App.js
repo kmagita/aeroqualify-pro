@@ -905,9 +905,8 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
     delete payload.additional_notify_text;
     if(isNew) {
       payload.raised_by=user.id; payload.raised_by_name=profile?.full_name||user.email;
-      console.log("[saveCar] payload keys:", Object.keys(payload)); console.log("[saveCar] error check:", JSON.stringify(payload));
       const{error}=await supabase.from(TABLES.cars).insert(payload);
-      if(error){console.error("[saveCar] DB error:", error); showToast(`Error: ${error.message}`,"error");return;}
+      if(error){showToast(`Error: ${error.message}`,"error");return;}
       await logChange({user,action:"created",table:"cars",recordId:form.id,recordTitle:form.title||form.id,newData:form});
       const carRm=managers.find(m=>m.role_title===form.responsible_manager); const extraEmails=(form.additional_notify_text||"").split(",").map(s=>s.trim()).filter(Boolean); await sendNotification({type:"car_raised",record:{...form,raised_by_name:profile?.full_name||user.email},recipients:[carRm?.email,...extraEmails].filter(Boolean)});
       showToast("CAR raised -- responsible manager notified","success");
