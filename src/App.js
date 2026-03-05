@@ -514,7 +514,7 @@ const CARModal = ({ car, managers, onSave, onClose }) => {
         </Select>
         <Input label="Due Date" type="date" value={form.due_date||""} onChange={e=>set("due_date",e.target.value)} />
         <div style={{ gridColumn:"1/-1" }}>
-          <Input label="Additional Notification Recipients (comma separated emails)" value={(form.additional_notify||[]).join(",")} onChange={e=>set("additional_notify",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))} placeholder="person@company.com, other@company.com" />
+          <Input label="Additional Notification Recipients (comma separated emails)" value={form.additional_notify_text||""} onChange={e=>set("additional_notify_text",e.target.value)} placeholder="person@company.com, other@company.com" />
         </div>
       </div>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
@@ -907,7 +907,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
       const{error}=await supabase.from(TABLES.cars).insert(payload);
       if(error){showToast(`Error: ${error.message}`,"error");return;}
       await logChange({user,action:"created",table:"cars",recordId:form.id,recordTitle:form.title||form.id,newData:form});
-      const carRm=managers.find(m=>m.role_title===form.responsible_manager); await sendNotification({type:"car_raised",record:form,recipients:[carRm?.email,...(form.additional_notify||[])].filter(Boolean)});
+      const carRm=managers.find(m=>m.role_title===form.responsible_manager); const extraEmails=(form.additional_notify_text||"").split(",").map(s=>s.trim()).filter(Boolean); await sendNotification({type:"car_raised",record:{...form,raised_by_name:profile?.full_name||user.email},recipients:[carRm?.email,...extraEmails].filter(Boolean)});
       showToast("CAR raised -- responsible manager notified","success");
     } else {
       const{error}=await supabase.from(TABLES.cars).update(payload).eq("id",form.id);
