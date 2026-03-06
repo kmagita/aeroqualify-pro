@@ -3133,15 +3133,6 @@ const generateNotificationPDF = async (slot) => {
   drawBox("Scope of Audit", slot.notes||"As per Annual Audit Programme", M, y, col, 18); y+=20;
 
   // ── SECTION 2: PLANNED SEQUENCE OF EVENTS ───────────────────
-  y = needPage(y, 65);
-  doc.setFillColor(0,105,92); doc.rect(M,y,col,7,"F");
-  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  doc.text("SECTION 2 — PLANNED SEQUENCE OF EVENTS", M+3, y+4.8);
-  y+=9;
-
-  doc.setFillColor(232,245,233); doc.rect(M,y,col,52,"F");
-  doc.setDrawColor(200,230,201); doc.rect(M,y,col,52,"S");
-
   const phases = [
     {
       num:"1",
@@ -3163,24 +3154,53 @@ const generateNotificationPDF = async (slot) => {
     }
   ];
 
-  let py = y+5;
-  phases.forEach((phase) => {
-    // Phase number circle
-    doc.setFillColor(...phase.color);
-    doc.circle(M+7, py+3.5, 4, "F");
-    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(255,255,255);
-    doc.text(phase.num, M+7, py+5.5, {align:"center"});
-    // Phase title
-    doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...phase.color);
-    doc.text(`Phase ${phase.num}: ${phase.title}`, M+14, py+5);
-    py+=9;
-    // Phase description
-    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-    const pLines = doc.splitTextToSize(phase.text, col-18);
-    doc.text(pLines, M+14, py);
-    py += pLines.length*4+5;
+  // Pre-calculate total height needed for section 2 background
+  const textIndent = M+16; const textW = col-20; const PH=4.5; const titleH=6;
+  let sec2H = 6; // top padding
+  phases.forEach(phase => {
+    doc.setFont("helvetica","normal"); doc.setFontSize(8);
+    const ln = doc.splitTextToSize(phase.text, textW);
+    sec2H += titleH + ln.length*PH + 6; // title row + wrapped text + gap
   });
-  y += 54;
+  sec2H += 4; // bottom padding
+
+  y = needPage(y, sec2H + 9);
+  doc.setFillColor(0,105,92); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 2 — PLANNED SEQUENCE OF EVENTS", M+3, y+4.8);
+  y+=9;
+
+  // Draw background now that height is known
+  doc.setFillColor(232,245,233); doc.rect(M,y,col,sec2H,"F");
+  doc.setDrawColor(200,230,201); doc.setLineWidth(0.3); doc.rect(M,y,col,sec2H,"S");
+
+  let py = y+6;
+  phases.forEach((phase) => {
+    // Measure wrapped text first
+    doc.setFont("helvetica","normal"); doc.setFontSize(8);
+    const pLines = doc.splitTextToSize(phase.text, textW);
+
+    // Coloured left border stripe
+    doc.setFillColor(...phase.color); doc.rect(M+3, py-1, 2, titleH + pLines.length*PH + 1, "F");
+
+    // Phase number badge
+    doc.setFillColor(...phase.color); doc.roundedRect(M+7, py, 7, 5.5, 1, 1, "F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text(`${phase.num}`, M+10.5, py+4, {align:"center"});
+
+    // Phase title on same baseline as badge
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...phase.color);
+    doc.text(`Phase ${phase.num}: ${phase.title}`, textIndent, py+4);
+
+    py += titleH;
+
+    // Description indented to match title
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(40,50,65);
+    doc.text(pLines, textIndent, py);
+    py += pLines.length * PH + 6;
+  });
+
+  y += sec2H + 2;
 
   // ── SECTION 3: NOTICE TO AUDITEE ─────────────────────────────
   y = needPage(y, 28);
@@ -3189,15 +3209,18 @@ const generateNotificationPDF = async (slot) => {
   doc.text("SECTION 3 — NOTICE TO AUDITEE", M+3, y+4.8);
   y+=9;
 
-  doc.setFillColor(255,243,224); doc.rect(M,y,col,18,"F");
-  doc.setDrawColor(255,204,128); doc.rect(M,y,col,18,"S");
+  const notice = "This notification is issued at least 7 days prior to the scheduled audit date in accordance with the Quality Manual. Please ensure all relevant records, documentation and personnel are available on the date of audit. This audit is a mandatory quality assurance activity. Your full cooperation is required and expected.";
+  doc.setFont("helvetica","normal"); doc.setFontSize(8);
+  const noticeLines = doc.splitTextToSize(notice, col-6);
+  const noticeBoxH = 5 + 5 + noticeLines.length*4.5 + 4; // top + title + text + bottom
+
+  doc.setFillColor(255,243,224); doc.rect(M,y,col,noticeBoxH,"F");
+  doc.setDrawColor(255,204,128); doc.setLineWidth(0.3); doc.rect(M,y,col,noticeBoxH,"S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(230,81,0);
   doc.text("Important Notice", M+3, y+6);
   doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-  const notice = "This notification is issued at least 7 days prior to the scheduled audit date in accordance with the Quality Manual. Please ensure all relevant records, documentation and personnel are available on the date of audit. This audit is a mandatory quality assurance activity. Your full cooperation is required and expected.";
-  const noticeLines = doc.splitTextToSize(notice, col-6);
-  doc.text(noticeLines, M+3, y+11);
-  y+=22;
+  doc.text(noticeLines, M+3, y+12);
+  y += noticeBoxH + 2;
 
   // ── Attachments list ─────────────────────────────────────────
   if(slot.attachments && slot.attachments.length>0){
