@@ -3278,20 +3278,17 @@ const generateNotificationPDF = async (slot) => {
           } catch(e){ console.warn("Image embed failed:", e); }
 
         } else if(isPDF){
-          // For PDFs: use pdf-lib to extract pages and add to jsPDF
+          // Render PDF pages via pdfjs (loaded in index.html) → canvas → JPEG → embed
           try {
-            const { PDFDocument } = await import("https://cdn.skypack.dev/pdf-lib@1.17.1");
-            const base64Data = f.dataUrl.split(",")[1];
-            const pdfBytes = Uint8Array.from(atob(base64Data), c=>c.charCodeAt(0));
-            const srcPdf = await PDFDocument.load(pdfBytes);
-            const pageCount = srcPdf.getPageCount();
-
-            // Render each PDF page as an image via canvas
             const pdfjsLib = window["pdfjs-dist/build/pdf"];
             if(pdfjsLib){
+              const base64Data = f.dataUrl.split(",")[1];
+              const pdfBytes = Uint8Array.from(atob(base64Data), c=>c.charCodeAt(0));
               const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
               const pdfDoc2 = await loadingTask.promise;
-              for(let p=1; p<=Math.min(pageCount,10); p++){
+              const pageCount = pdfDoc2.numPages;
+              const maxPages = Math.min(pageCount, 10);
+              for(let p=1; p<=maxPages; p++){
                 const page = await pdfDoc2.getPage(p);
                 const viewport = page.getViewport({ scale: 2.0 });
                 const canvas = document.createElement("canvas");
@@ -3304,23 +3301,21 @@ const generateNotificationPDF = async (slot) => {
                 y = needPage(y, dH2 + 4);
                 doc.addImage(imgData, "JPEG", M, y, dW2, dH2);
                 y += dH2 + 4;
-                // Page label for multi-page PDFs
-                if(pageCount>1){
+                if(pageCount > 1){
                   doc.setFont("helvetica","italic"); doc.setFontSize(7); doc.setTextColor(140,160,180);
-                  doc.text(`Page ${p} of ${pageCount}`, M+col, y-2, {align:"right"});
+                  doc.text("Page " + p + " of " + pageCount, M+col, y-2, {align:"right"});
                 }
               }
-              if(pageCount>10){
+              if(pageCount > 10){
                 doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
-                doc.text(`[${pageCount-10} additional pages not shown — see original file]`, M+3, y+5);
+                doc.text("[" + (pageCount-10) + " additional pages not shown — see original file]", M+3, y+5);
                 y+=10;
               }
             } else {
-              // pdfjs not available — show placeholder
               doc.setFillColor(245,248,252); doc.rect(M,y,col,14,"F");
               doc.setDrawColor(221,227,234); doc.rect(M,y,col,14,"S");
               doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
-              doc.text(`[PDF attached: ${f.name} — open original file to view]`, M+4, y+8.5);
+              doc.text("[PDF attached: " + f.name + " — PDF viewer unavailable]", M+4, y+8.5);
               y+=16;
             }
           } catch(e){
@@ -3328,7 +3323,7 @@ const generateNotificationPDF = async (slot) => {
             doc.setFillColor(245,248,252); doc.rect(M,y,col,14,"F");
             doc.setDrawColor(221,227,234); doc.rect(M,y,col,14,"S");
             doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
-            doc.text(`[PDF attached: ${f.name} — open original file to view]`, M+4, y+8.5);
+            doc.text("[PDF attached: " + f.name + " — could not render inline]", M+4, y+8.5);
             y+=16;
           }
 
