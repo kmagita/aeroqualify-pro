@@ -3242,7 +3242,7 @@ const generateNotificationPDF = async (slot) => {
     doc.text("ATTACHMENTS", M+3, y+4.8);
     y+=9;
 
-    slot.attachments.forEach((f,idx)=>{
+    for(let idx=0; idx<slot.attachments.length; idx++){ const f=slot.attachments[idx];
       // Attachment header bar
       y = needPage(y, 14);
       doc.setFillColor(237,231,246); doc.rect(M,y,col,9,"F");
@@ -3349,7 +3349,7 @@ const generateNotificationPDF = async (slot) => {
         y+=14;
       }
       y+=2; // gap between attachments
-    });
+    }
   }
 
   // ── SECTION 4: ISSUED BY ─────────────────────────────────────
