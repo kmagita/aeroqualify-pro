@@ -6,7 +6,4003 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 // ─── Global Styles ──────────────────────────────────────────
 const GlobalStyle = () => (
   <>
+    <link href="https://fonts.googleapis.com/css2?famimport { useState, useEffect, useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
+import { supabase, TABLES, logChange, sendNotification } from "./supabase";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+
+// ─── Global Styles ──────────────────────────────────────────
+const GlobalStyle = () => (
+  <>
     <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet" />
+    <style>{`
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body, #root { height: 100%; }
+      body { background: #eef2f7; overflow: hidden; font-family: 'Source Sans 3', sans-serif; }
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar-track { background: #e8edf3; }
+      ::-webkit-scrollbar-thumb { background: #b0bec5; border-radius: 3px; }
+      input, select, textarea { outline: none; font-family: 'Source Sans 3', sans-serif; }
+      button { font-family: 'Source Sans 3', sans-serif; cursor: pointer; }
+      @keyframes fadeIn  { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+      @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+      @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.4} }
+      @keyframes spin    { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+      .nav-item:hover    { background: rgba(1,87,155,0.08) !important; color: #01579b !important; }
+      .nav-item.active   { background: rgba(1,87,155,0.12) !important; color: #01579b !important; border-left: 3px solid #01579b !important; }
+      .row-hover:hover   { background: #f5f8fc !important; }
+      .btn-primary:hover { background: #01579b !important; }
+      .btn-danger:hover  { background: #c62828 !important; }
+      .btn-ghost:hover   { background: #e8edf3 !important; }
+      .btn-success:hover { background: #2e7d32 !important; }
+      .card { background: #fff; border-radius: 10px; border: 1px solid #dde3ea; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+      .tooltip-wrap { position: relative; cursor: pointer; }
+      .tooltip-wrap .tooltip-box { display:none; position:absolute; left:0; top:100%; z-index:500; background:#1a2332; color:#fff; font-size:12px; line-height:1.5; padding:10px 14px; border-radius:8px; min-width:260px; max-width:400px; white-space:pre-wrap; box-shadow:0 4px 20px rgba(0,0,0,0.2); margin-top:4px; }
+      .tooltip-wrap:hover .tooltip-box { display:block; animation:fadeIn 0.15s ease; }
+    `}</style>
+  </>
+);
+
+// ─── Theme ───────────────────────────────────────────────────
+const T = {
+  bg: "#eef2f7", surface: "#fff", card: "#fff",
+  border: "#dde3ea", borderDark: "#b0bec5",
+  primary: "#01579b", primaryLt: "#e3f2fd", primaryDk: "#003c71",
+  green: "#2e7d32", greenLt: "#e8f5e9",
+  yellow: "#e65100", yellowLt: "#fff3e0",
+  red: "#c62828", redLt: "#ffebee",
+  teal: "#00695c", tealLt: "#e0f2f1",
+  purple: "#4527a0", purpleLt: "#ede7f6",
+  sky: "#0277bd", skyLt: "#e1f5fe",
+  text: "#1a2332", muted: "#5f7285", light: "#8fa0b0",
+  white: "#ffffff",
+};
+
+// ─── Status meta ─────────────────────────────────────────────
+const SM = {
+  Open:                  { c:T.red,    bg:T.redLt    },
+  "In Progress":         { c:T.yellow, bg:T.yellowLt },
+  "Pending Verification":    { c:T.purple, bg:T.purpleLt },
+  "Returned for Resubmission":{ c:"#b71c1c", bg:"#ffebee" },
+  "Pending":             { c:T.yellow, bg:T.yellowLt },
+  Overdue:               { c:T.red,    bg:T.redLt    },
+  Closed:                { c:T.green,  bg:T.greenLt  },
+  Approved:              { c:T.green,  bg:T.greenLt  },
+  Completed:             { c:T.green,  bg:T.greenLt  },
+  Valid:                 { c:T.green,  bg:T.greenLt  },
+  Effective:             { c:T.green,  bg:T.greenLt  },
+  Scheduled:             { c:T.teal,   bg:T.tealLt   },
+  Draft:                 { c:T.muted,  bg:"#f5f5f5"  },
+  "In Review":           { c:T.yellow, bg:T.yellowLt },
+  Expired:               { c:T.red,    bg:T.redLt    },
+  "Not Effective":       { c:T.red,    bg:T.redLt    },
+  Critical:              { c:T.red,    bg:T.redLt    },
+  Major:                 { c:T.yellow, bg:T.yellowLt },
+  Minor:                 { c:T.teal,   bg:T.tealLt   },
+  Corrective:            { c:T.primary,bg:T.primaryLt},
+  Preventive:            { c:T.purple, bg:T.purpleLt },
+  Internal:              { c:T.primary,bg:T.primaryLt},
+  External:              { c:T.purple, bg:T.purpleLt },
+  Supplier:              { c:T.teal,   bg:T.tealLt   },
+  admin:                 { c:T.red,    bg:T.redLt    },
+  quality_manager:       { c:T.primary,bg:T.primaryLt},
+  quality_auditor:       { c:T.sky,    bg:T.skyLt    },
+  manager:               { c:T.teal,   bg:T.tealLt   },
+  viewer:                { c:T.muted,  bg:"#f5f5f5"  },
+  "A+":{ c:T.green, bg:T.greenLt }, A:{ c:T.green, bg:T.greenLt },
+  B:   { c:T.yellow,bg:T.yellowLt}, C:{ c:T.red,   bg:T.redLt   },
+};
+
+const Badge = ({ label }) => {
+  if (!label) return null;
+  const m = SM[label] || { c: T.muted, bg: "#f5f5f5" };
+  return <span style={{ background:m.bg, color:m.c, border:`1px solid ${m.c}33`, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:600, whiteSpace:"nowrap", fontFamily:"'Source Code Pro',monospace" }}>{label}</span>;
+};
+
+// ─── Helpers ─────────────────────────────────────────────────
+const daysUntil    = (d) => d ? Math.ceil((new Date(d) - new Date()) / 86400000) : null;
+const isOverdue    = (d) => { const n=daysUntil(d); return n!==null&&n<0; };
+const isApproaching= (d) => { const n=daysUntil(d); return n!==null&&n>=0&&n<=14; };
+const fmt          = (d) => d ? new Date(d).toLocaleDateString("en-GB") : "--";
+const today        = () => new Date().toISOString().slice(0,10);
+
+// ─── Atoms ───────────────────────────────────────────────────
+const Input = ({ label, ...props }) => (
+  <div style={{ marginBottom:14 }}>
+    {label && <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:4 }}>{label}</label>}
+    <input {...props} style={{ width:"100%", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:6, padding:"9px 12px", color:T.text, fontSize:13, transition:"border 0.15s", ...props.style }}
+      onFocus={e=>e.target.style.borderColor=T.primary} onBlur={e=>e.target.style.borderColor=T.border} />
+  </div>
+);
+
+const Textarea = ({ label, rows=3, ...props }) => (
+  <div style={{ marginBottom:14 }}>
+    {label && <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:4 }}>{label}</label>}
+    <textarea {...props} rows={rows} style={{ width:"100%", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:6, padding:"9px 12px", color:T.text, fontSize:13, resize:"vertical", fontFamily:"inherit", ...props.style }}
+      onFocus={e=>e.target.style.borderColor=T.primary} onBlur={e=>e.target.style.borderColor=T.border} />
+  </div>
+);
+
+const Select = ({ label, children, ...props }) => (
+  <div style={{ marginBottom:14 }}>
+    {label && <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:4 }}>{label}</label>}
+    <select {...props} style={{ width:"100%", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:6, padding:"9px 12px", color:T.text, fontSize:13, ...props.style }}>
+      {children}
+    </select>
+  </div>
+);
+
+const Btn = ({ children, variant="primary", size="md", ...props }) => {
+  const variants = {
+    primary: { background:T.primary, color:"#fff", border:"none" },
+    danger:  { background:T.red,     color:"#fff", border:"none" },
+    ghost:   { background:"transparent", color:T.muted, border:`1px solid ${T.border}` },
+    success: { background:T.green,   color:"#fff", border:"none" },
+    outline: { background:"transparent", color:T.primary, border:`1px solid ${T.primary}` },
+  };
+  const sizes = { sm:{ padding:"5px 12px", fontSize:12 }, md:{ padding:"8px 18px", fontSize:13 }, lg:{ padding:"11px 24px", fontSize:14 } };
+  return (
+    <button {...props} className={`btn-${variant}`}
+      style={{ borderRadius:7, fontWeight:600, transition:"background 0.15s", ...variants[variant], ...sizes[size], ...(props.style||{}) }}>
+      {children}
+    </button>
+  );
+};
+
+const Checkbox = ({ label, checked, onChange }) => (
+  <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:10 }}>
+    <div onClick={onChange} style={{ width:18, height:18, borderRadius:4, border:`2px solid ${checked?T.primary:T.border}`, background:checked?T.primary:"#fff", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.15s", flexShrink:0 }}>
+      {checked && <span style={{ color:"#fff", fontSize:11, fontWeight:700 }}>✓</span>}
+    </div>
+    <span style={{ fontSize:13, color:T.text }}>{label}</span>
+  </label>
+);
+
+// ─── Section Header ───────────────────────────────────────────
+const SectionHeader = ({ title, subtitle, action }) => (
+  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+    <div>
+      <h2 style={{ fontFamily:"'Oxanium',sans-serif", fontSize:22, fontWeight:700, color:T.primaryDk, letterSpacing:0.5 }}>{title}</h2>
+      {subtitle && <p style={{ fontSize:13, color:T.muted, marginTop:2 }}>{subtitle}</p>}
+    </div>
+    {action}
+  </div>
+);
+
+// ─── Card ─────────────────────────────────────────────────────
+const Card = ({ children, style, title, action }) => (
+  <div className="card" style={{ padding:20, animation:"fadeIn 0.3s ease", ...style }}>
+    {title && (
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.border}` }}>
+        <span style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:700, fontSize:15, color:T.primaryDk }}>{title}</span>
+        {action}
+      </div>
+    )}
+    {children}
+  </div>
+);
+
+// ─── Toast ────────────────────────────────────────────────────
+const Toast = ({ message, type, onDone }) => {
+  useEffect(() => { const t=setTimeout(onDone,3500); return ()=>clearTimeout(t); },[onDone]);
+  const colors = { success:T.green, error:T.red, info:T.primary, warning:T.yellow };
+  return (
+    <div style={{ position:"fixed", bottom:24, right:24, background:"#fff", border:`1px solid ${colors[type]||T.border}`, borderLeft:`4px solid ${colors[type]||T.primary}`, borderRadius:8, padding:"12px 18px", color:T.text, fontSize:13, zIndex:9999, animation:"fadeIn 0.2s ease", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", maxWidth:360 }}>
+      {message}
+    </div>
+  );
+};
+
+// ─── Alert Banner ─────────────────────────────────────────────
+const AlertBanner = ({ items }) => {
+  const [dismissed, setDismissed] = useState(false);
+  if (!items.length||dismissed) return null;
+  return (
+    <div style={{ background:T.yellowLt, borderBottom:`1px solid #ffb74d`, padding:"9px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexShrink:0 }}>
+      <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", flex:1 }}>
+        <span style={{ fontSize:16 }}>⚠️</span>
+        <span style={{ color:T.yellow, fontWeight:700, fontSize:12 }}>ACTION REQUIRED:</span>
+        {items.slice(0,4).map((item,i) => (
+          <span key={i} style={{ fontSize:12, color:T.text }}>
+            <span style={{ color:isOverdue(item.due)?T.red:T.yellow, fontFamily:"'Source Code Pro',monospace", fontWeight:600 }}>{item.id}</span>
+            {" -- "}<span style={{ color:isOverdue(item.due)?T.red:T.yellow }}>{isOverdue(item.due)?`OVERDUE ${Math.abs(daysUntil(item.due))}d`:`due in ${daysUntil(item.due)}d`}</span>
+            {i<Math.min(items.length,4)-1&&<span style={{ color:T.muted }}> · </span>}
+          </span>
+        ))}
+        {items.length>4&&<span style={{ fontSize:12,color:T.muted }}>+{items.length-4} more</span>}
+      </div>
+      <button onClick={()=>setDismissed(true)} style={{ background:"none", border:"none", color:T.muted, fontSize:18 }}>✕</button>
+    </div>
+  );
+};
+
+// ─── Login ────────────────────────────────────────────────────
+const LoginScreen = ({ onLogin }) => {
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState("");
+  const [loading,setLoading]=useState(false); const [err,setErr]=useState(""); const [mode,setMode]=useState("login");
+  const handle = async(e) => {
+    e.preventDefault(); setLoading(true); setErr("");
+    try {
+      if(mode==="reset"){
+        const{error}=await supabase.auth.resetPasswordForEmail(email);
+        if(error)throw error; setErr("✓ Reset link sent — check your email");
+      } else if(mode==="signup"){
+        const{error}=await supabase.auth.signUp({email,password:pw,options:{data:{full_name:email.split("@")[0]}}});
+        if(error)throw error; setErr("✓ Account created -- check your email to confirm");
+      } else {
+        const{data,error}=await supabase.auth.signInWithPassword({email,password:pw});
+        if(error)throw error; onLogin(data.user);
+      }
+    } catch(ex){setErr(ex.message);} setLoading(false);
+  };
+  return (
+    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg, #e3f2fd 0%, #f0f4f8 50%, #e8f5e9 100%)`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <GlobalStyle />
+      {/* Sky horizon decoration */}
+      <div style={{ position:"fixed", top:0, left:0, right:0, height:4, background:`linear-gradient(90deg,${T.primary},${T.sky},${T.teal})` }} />
+      <div style={{ width:400, animation:"fadeIn 0.5s ease" }}>
+        <div style={{ textAlign:"center", marginBottom:32 }}>
+          <div style={{ width:64, height:64, borderRadius:16, background:`linear-gradient(135deg,${T.primary},${T.sky})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, margin:"0 auto 16px", boxShadow:"0 4px 20px rgba(1,87,155,0.25)" }}>✈</div>
+          <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:28, fontWeight:800, color:T.primaryDk, letterSpacing:1 }}>AeroQualify Pro</div>
+          <div style={{ fontSize:13, color:T.muted, marginTop:4 }}>Aviation Quality Management System</div>
+        </div>
+        <div className="card" style={{ padding:32 }}>
+          <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:700, fontSize:16, color:T.primaryDk, marginBottom:22 }}>
+            {mode==="login"?"Sign In":mode==="signup"?"Create Account":"Reset Password"}
+          </div>
+          <form onSubmit={handle}>
+            <Input label="Email" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com" required />
+            {mode!=="reset"&&<Input label="Password" type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" required />}
+            {err&&<div style={{ fontSize:12, color:err.startsWith("✓")?T.green:T.red, marginBottom:14, padding:"8px 12px", background:err.startsWith("✓")?T.greenLt:T.redLt, borderRadius:6 }}>{err}</div>}
+            <Btn type="submit" size="lg" style={{ width:"100%", opacity:loading?0.7:1 }}>{loading?"Please wait…":mode==="login"?"Sign In":mode==="signup"?"Create Account":"Send Reset Link"}</Btn>
+          </form>
+          <div style={{ display:"flex", justifyContent:"space-between", marginTop:16 }}>
+            <button onClick={()=>setMode(mode==="login"?"signup":"login")} style={{ background:"none",border:"none",color:T.primary,fontSize:12 }}>{mode==="login"?"Create account":"Back to sign in"}</button>
+            {mode==="login"&&<button onClick={()=>setMode("reset")} style={{ background:"none",border:"none",color:T.muted,fontSize:12 }}>Forgot password?</button>}
+          </div>
+        </div>
+        <div style={{ textAlign:"center", marginTop:16, fontSize:11, color:T.muted }}>AS9100D · ISO 9001:2015 · AS9110</div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Dashboard Charts ─────────────────────────────────────────
+const CHART_COLORS = [T.primary, T.yellow, T.green, T.teal, T.purple, T.red];
+
+const Dashboard = ({ data }) => {
+  const openCARs     = data.cars.filter(c=>["Open","Overdue"].includes(c.status)).length;
+  const inProgCARs   = data.cars.filter(c=>["In Progress","Returned for Resubmission"].includes(c.status)).length;
+  const pendVerif    = data.cars.filter(c=>c.status==="Pending Verification").length;
+  const closedCARs   = data.cars.filter(c=>["Closed","Completed"].includes(c.status)).length;
+  const upAudits     = data.audits.filter(a=>a.status==="Scheduled").length;
+  const expDocs      = data.flightDocs.filter(d=>isOverdue(d.expiry_date)||isApproaching(d.expiry_date)).length;
+
+  // ── QMS Compliance Score ─────────────────────────────────────
+  // Weighted scoring across 5 pillars (total 100 points)
+  const totalCARs    = data.cars.length;
+  const overdueCARs  = data.cars.filter(c=>c.status==="Overdue").length;
+  const criticalOpen = data.cars.filter(c=>c.severity==="Critical"&&!["Closed","Completed"].includes(c.status)).length;
+  const expiredDocs  = data.flightDocs.filter(d=>isOverdue(d.expiry_date)).length;
+  const totalFlDocs  = data.flightDocs.length;
+  const capRate      = totalCARs>0 ? data.caps.filter(c=>c.status==="Complete").length/totalCARs : 1;
+  const closeRate    = totalCARs>0 ? closedCARs/totalCARs : 1;
+  const auditsDone   = data.audits.filter(a=>a.status==="Completed").length;
+  const auditsTotal  = data.audits.length;
+  const contractorOk = data.contractors.filter(c=>["A+","A"].includes(c.rating)).length;
+  const contractorTot= data.contractors.length;
+
+  // Pillar 1 — CAPA Closure Rate (25pts): % of CARs closed
+  const p1 = Math.round(25 * Math.min(closeRate, 1));
+  // Pillar 2 — CAP Compliance (20pts): % of CARs with complete CAPs
+  const p2 = Math.round(20 * Math.min(capRate, 1));
+  // Pillar 3 — No Overdue/Critical (25pts): deduct for each overdue or critical open
+  const p3 = Math.max(0, 25 - (overdueCARs * 5) - (criticalOpen * 8));
+  // Pillar 4 — Document Currency (20pts): deduct for expired docs
+  const p4 = totalFlDocs>0 ? Math.max(0, Math.round(20 * (1 - expiredDocs/totalFlDocs))) : 20;
+  // Pillar 5 -- Audit & Contractor Health (10pts)
+  const auditScore  = auditsTotal>0 ? (auditsDone/auditsTotal)*5 : 5;
+  const contScore   = contractorTot>0 ? (contractorOk/contractorTot)*5 : 5;
+  const p5          = Math.round(auditScore + contScore);
+
+  // Risk Register bonus/penalty (replaces p5 weighting when risks exist)
+  const totalRisks    = (data.risks||[]).length;
+  const openCritRisks = (data.risks||[]).filter(r=>r.residual_rating==="Critical"&&r.status!=="Closed").length;
+  const treatedRisks  = (data.risks||[]).filter(r=>r.treatment_action&&r.status!=="Open").length;
+  const riskPenalty   = Math.min(10, openCritRisks * 5);
+  const riskBonus     = totalRisks>0 ? Math.round((treatedRisks/totalRisks)*5) : 0;
+
+  const compScore   = Math.min(100, p1+p2+Math.max(0,p3-riskPenalty)+p4+p5+riskBonus);
+  const scoreColor  = compScore>=90?"#2e7d32":compScore>=75?T.teal:compScore>=60?T.yellow:compScore>=40?"#e65100":T.red;
+  const scoreLabel  = compScore>=90?"Excellent":compScore>=75?"Good":compScore>=60?"Satisfactory":compScore>=40?"Needs Attention":"Critical";
+  const pillars     = [
+    {label:"CAPA Closure",    score:p1, max:25, desc:`${closedCARs}/${totalCARs} CARs closed`},
+    {label:"CAP Compliance",  score:p2, max:20, desc:`${data.caps.filter(c=>c.status==="Complete").length}/${totalCARs} CAPs complete`},
+    {label:"No Overdue/Critical",score:Math.min(p3,25),max:25,desc:`${overdueCARs} overdue · ${criticalOpen} critical open`},
+    {label:"Document Currency",score:p4,max:20, desc:`${totalFlDocs-expiredDocs}/${totalFlDocs} docs current`},
+    {label:"Audit & Contractors",score:p5,max:10,desc:`${auditsDone} audits done · ${contractorOk} approved contractors`},
+  ];
+
+  const carsByStatus = [
+    {name:"Open/Overdue",value:openCARs},{name:"In Progress",value:inProgCARs},
+    {name:"Pend. Verif.",value:pendVerif},{name:"Closed",value:closedCARs},
+  ].filter(d=>d.value>0);
+
+  const carsBySeverity = ["Critical","Major","Minor"].map(s=>({
+    name:s, value:data.cars.filter(c=>c.severity===s).length
+  })).filter(d=>d.value>0);
+
+  const monthlyData = Array.from({length:6},(_,i)=>{
+    const d=new Date(); d.setMonth(d.getMonth()-5+i);
+    const mo=d.toLocaleString("en-GB",{month:"short"});
+    const yr=d.getFullYear(); const mn=d.getMonth();
+    return {
+      month:mo,
+      Raised: data.cars.filter(c=>{ const cd=new Date(c.created_at); return cd.getFullYear()===yr&&cd.getMonth()===mn; }).length,
+      Closed: data.cars.filter(c=>{ const cd=new Date(c.updated_at); return c.status==="Closed"&&cd.getFullYear()===yr&&cd.getMonth()===mn; }).length,
+    };
+  });
+
+  const kpis = [
+    {label:"Open CARs",     value:openCARs,   color:T.red,    icon:"📋", sub:overdueCARs>0?`${overdueCARs} overdue`:"Requires action"},
+    {label:"In Progress",   value:inProgCARs, color:T.yellow, icon:"🔄", sub:"CAP being completed"},
+    {label:"Pend. Verif.",  value:pendVerif,  color:T.purple, icon:"🔍", sub:"Awaiting QM review"},
+    {label:"Closed",        value:closedCARs, color:T.green,  icon:"✅", sub:"Verified closed"},
+    {label:"Upcoming Audits",value:upAudits,  color:T.teal,   icon:"📅", sub:"Scheduled"},
+    {label:"Expiring Docs", value:expDocs,    color:T.yellow, icon:"📄", sub:"Within 14 days"},
+  ];
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+      {/* KPIs */}
+      <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+        {kpis.map(k=>(
+          <div key={k.label} className="card" style={{ flex:1, minWidth:140, padding:"18px 20px", borderTop:`3px solid ${k.color}`, animation:"fadeIn 0.4s ease" }}>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:32, fontFamily:"'Oxanium',sans-serif", fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
+                <div style={{ fontSize:12, color:T.text, fontWeight:600, marginTop:4 }}>{k.label}</div>
+                <div style={{ fontSize:11, color:T.muted, marginTop:2 }}>{k.sub}</div>
+              </div>
+              <span style={{ fontSize:22, opacity:0.6 }}>{k.icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* QMS Compliance Score */}
+      <div className="card" style={{ padding:"20px 24px", borderTop:`4px solid ${scoreColor}`, animation:"fadeIn 0.4s ease" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:24, alignItems:"center" }}>
+          {/* Score dial */}
+          <div style={{ textAlign:"center", minWidth:130 }}>
+            <div style={{ position:"relative", display:"inline-block" }}>
+              <svg width="130" height="130" viewBox="0 0 130 130">
+                {/* Background arc */}
+                <circle cx="65" cy="65" r="54" fill="none" stroke="#eef2f7" strokeWidth="10"/>
+                {/* Score arc -- strokeDasharray trick for partial circle */}
+                <circle cx="65" cy="65" r="54" fill="none" stroke={scoreColor} strokeWidth="10"
+                  strokeDasharray={`${(compScore/100)*339.3} 339.3`}
+                  strokeLinecap="round"
+                  transform="rotate(-90 65 65)"
+                  style={{transition:"stroke-dasharray 1s ease"}}/>
+                <text x="65" y="58" textAnchor="middle" style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:28,fill:scoreColor}}>{compScore}</text>
+                <text x="65" y="72" textAnchor="middle" style={{fontFamily:"'Oxanium',sans-serif",fontWeight:600,fontSize:11,fill:"#5f7285"}}>/100</text>
+                <text x="65" y="86" textAnchor="middle" style={{fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,fontSize:10,fill:scoreColor}}>{scoreLabel.toUpperCase()}</text>
+              </svg>
+            </div>
+            <div style={{ fontSize:12, fontWeight:700, color:T.text, marginTop:2 }}>QMS Compliance Score</div>
+            <div style={{ fontSize:10, color:T.muted, marginTop:2 }}>AS9100D · ISO 9001:2015</div>
+          </div>
+          {/* Pillars */}
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {pillars.map(p=>{
+              const pct=Math.round((p.score/p.max)*100);
+              const pc=pct>=80?"#2e7d32":pct>=60?T.teal:pct>=40?T.yellow:T.red;
+              return (
+                <div key={p.label}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                    <span style={{ fontSize:11, fontWeight:600, color:T.text }}>{p.label}</span>
+                    <span style={{ fontSize:11, color:T.muted }}>{p.score}/{p.max} pts · <span style={{color:T.muted,fontStyle:"italic"}}>{p.desc}</span></span>
+                  </div>
+                  <div style={{ height:7, background:"#eef2f7", borderRadius:4, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${pct}%`, background:pc, borderRadius:4, transition:"width 0.8s ease" }}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:16 }}>
+        <Card title="CAR Trend (6 months)">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+              <XAxis dataKey="month" tick={{fontSize:11,fill:T.muted}} />
+              <YAxis tick={{fontSize:11,fill:T.muted}} />
+              <Tooltip contentStyle={{fontSize:12,borderRadius:8,border:`1px solid ${T.border}`}} />
+              <Bar dataKey="Raised" fill={T.primary} radius={[3,3,0,0]} />
+              <Bar dataKey="Closed" fill={T.green} radius={[3,3,0,0]} />
+              <Legend wrapperStyle={{fontSize:12}} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="By Status">
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={carsByStatus} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                {carsByStatus.map((e,i)=><Cell key={i} fill={e.name==="Closed"?T.green:e.name==="Open"?T.red:e.name==="In Progress"?T.yellow:T.purple} />)}
+              </Pie>
+              <Tooltip contentStyle={{fontSize:12,borderRadius:8}} />
+              <Legend wrapperStyle={{fontSize:11}} />
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card title="By Severity">
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={carsBySeverity} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                {carsBySeverity.map((_,i)=><Cell key={i} fill={[T.red,T.yellow,T.teal][i]||CHART_COLORS[i]} />)}
+              </Pie>
+              <Tooltip contentStyle={{fontSize:12,borderRadius:8}} />
+              <Legend wrapperStyle={{fontSize:11}} />
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      {/* Recent CARs + Upcoming Audits */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        <Card title="Recent CARs">
+          {data.cars.slice(0,6).map(c=>(
+            <div key={c.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+              <div>
+                <div style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{c.id}</div>
+                <div style={{ fontSize:12, color:T.text, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.title}</div>
+                <div style={{ fontSize:11, color:T.muted }}>Clause: {c.qms_clause||"--"}</div>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:3, alignItems:"flex-end" }}>
+                <Badge label={c.severity}/><Badge label={c.status}/>
+              </div>
+            </div>
+          ))}
+          {data.cars.length===0&&<div style={{ textAlign:"center", color:T.muted, fontSize:13, padding:20 }}>No CARs raised yet</div>}
+        </Card>
+        <Card title="Upcoming Audits">
+          {data.audits.filter(a=>a.status==="Scheduled").map(a=>{
+            const d=daysUntil(a.date);
+            return (
+              <div key={a.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+                <div>
+                  <div style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11 }}>{a.id}</div>
+                  <div style={{ fontSize:12, color:T.text }}>{a.title}</div>
+                  <div style={{ fontSize:11, color:d!==null&&d<=7?T.red:T.muted }}>{fmt(a.date)}{d!==null?` (${d}d)`:""}</div>
+                </div>
+                <Badge label={a.type}/>
+              </div>
+            );
+          })}
+          {data.audits.filter(a=>a.status==="Scheduled").length===0&&<div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:20 }}>No upcoming audits</div>}
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ─── CAR Form Modal ───────────────────────────────────────────
+const CARModal = ({ car, managers, onSave, onClose }) => {
+  const [form, setForm] = useState(car || {
+    id:`CAR-${String(Date.now()).slice(-6)}`, status:"Open",
+    severity:"Minor", date_raised:today(),
+  });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  return (
+    <ModalShell title={car?"Edit CAR":"Raise New CAR"} onClose={onClose} wide>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+        <Input label="CAR Number" value={form.id||""} onChange={e=>set("id",e.target.value)} />
+        <Input label="Date Raised" type="date" value={form.date_raised||""} onChange={e=>set("date_raised",e.target.value)} />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Description of Finding" rows={4} value={form.finding_description||""} onChange={e=>set("finding_description",e.target.value)} />
+        </div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="QMS Clause Reference" rows={4} value={form.qms_clause||""} onChange={e=>set("qms_clause",e.target.value)} placeholder="e.g. Clause 8.7.1 -- Nonconforming outputs" />
+        </div>
+        <Select label="Severity" value={form.severity||""} onChange={e=>set("severity",e.target.value)}>
+          {["Minor","Major","Critical"].map(o=><option key={o}>{o}</option>)}
+        </Select>
+        <Select label="Responsible Manager" value={form.responsible_manager||""} onChange={e=>set("responsible_manager",e.target.value)}>
+          <option value="">Select…</option>
+          {managers.map(m=><option key={m.id} value={m.role_title}>{m.role_title}{m.person_name?` - ${m.person_name}`:""}</option>)}
+        </Select>
+        <Select label="Department" value={form.department||""} onChange={e=>set("department",e.target.value)}>
+          <option value="">Select…</option>
+          {["Training","Safety","Quality","Administration","Maintenance"].map(o=><option key={o}>{o}</option>)}
+        </Select>
+        <Input label="Due Date" type="date" value={form.due_date||""} onChange={e=>set("due_date",e.target.value)} />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Input label="Additional Notification Recipients (comma separated emails)" value={form.additional_notify_text||""} onChange={e=>set("additional_notify_text",e.target.value)} placeholder="person@company.com, other@company.com" />
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn onClick={()=>onSave(form)}>Save CAR</Btn>
+      </div>
+    </ModalShell>
+  );
+};
+
+// ─── CAP Form Modal ───────────────────────────────────────────
+const CAPModal = ({ car, cap, onSave, onClose }) => {
+  const [form, setForm] = useState(cap || { id:`CAP-${String(Date.now()).slice(-6)}`, car_id:car?.id, status:"Pending" });
+  const [newFiles, setNewFiles] = useState([]); // files staged for upload
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // Existing saved files (array stored as JSON in evidence_files, or legacy single file)
+  const savedFiles = (() => {
+    try { return JSON.parse(form.evidence_files||"[]"); } catch{ return []; }
+  })();
+  const legacyFile = !form.evidence_files && form.evidence_filename
+    ? [{name:form.evidence_filename, url:form.evidence_url}] : [];
+  const allSaved = [...savedFiles, ...legacyFile];
+
+  const hasEvidence = allSaved.length>0 || newFiles.length>0;
+  const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&hasEvidence;
+
+  const addFiles = (e) => {
+    const picked = Array.from(e.target.files||[]);
+    setNewFiles(prev=>[...prev, ...picked]);
+    e.target.value=""; // allow re-selecting same file
+  };
+  const removeNew = (i) => setNewFiles(prev=>prev.filter((_,idx)=>idx!==i));
+  const removeSaved = (i) => {
+    const updated = allSaved.filter((_,idx)=>idx!==i);
+    set("evidence_files", JSON.stringify(updated));
+    if(updated.length===0){ set("evidence_filename",""); set("evidence_url",""); }
+  };
+
+  return (
+    <ModalShell title={`CAP Form - ${car?.id}`} onClose={onClose} wide>
+      <div style={{ background:T.primaryLt, borderRadius:8, padding:"10px 14px", marginBottom:16, fontSize:12, color:T.primaryDk }}>
+        <strong>Finding:</strong> {car?.finding_description} &nbsp;|&nbsp; <strong>Clause:</strong> {car?.qms_clause}
+      </div>
+      <Textarea label="Immediate Corrective Action" rows={3} value={form.immediate_action||""} onChange={e=>set("immediate_action",e.target.value)} />
+      <Textarea label="Root Cause Analysis" rows={4} value={form.root_cause_analysis||""} onChange={e=>set("root_cause_analysis",e.target.value)} />
+      <Textarea label="Corrective Action" rows={3} value={form.corrective_action||""} onChange={e=>set("corrective_action",e.target.value)} />
+      <Textarea label="Preventive Action" rows={3} value={form.preventive_action||""} onChange={e=>set("preventive_action",e.target.value)} />
+
+      {/* Evidence upload */}
+      <div style={{ marginBottom:14 }}>
+        <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.muted, letterSpacing:0.8, textTransform:"uppercase", marginBottom:6 }}>Evidence of Closure</label>
+
+        {/* Already-saved files */}
+        {allSaved.length>0&&(
+          <div style={{ marginBottom:8 }}>
+            {allSaved.map((f,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.greenLt, border:`1px solid #a5d6a7`, borderRadius:6, padding:"6px 10px", marginBottom:4 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>📎</span>
+                  <div>
+                    <div style={{ fontSize:12, color:T.green, fontWeight:600 }}>{f.name}</div>
+                    {f.url&&<a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:T.primary }}>View file</a>}
+                  </div>
+                </div>
+                <button onClick={()=>removeSaved(i)} style={{ background:"none", border:"none", color:T.red, fontSize:16, cursor:"pointer", padding:"0 4px" }} title="Remove">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Newly staged files (not yet uploaded) */}
+        {newFiles.length>0&&(
+          <div style={{ marginBottom:8 }}>
+            {newFiles.map((f,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.primaryLt, border:`1px solid #90caf9`, borderRadius:6, padding:"6px 10px", marginBottom:4 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>🔄</span>
+                  <div>
+                    <div style={{ fontSize:12, color:T.primary, fontWeight:600 }}>{f.name}</div>
+                    <div style={{ fontSize:11, color:T.muted }}>{(f.size/1024).toFixed(1)} KB -- ready to upload</div>
+                  </div>
+                </div>
+                <button onClick={()=>removeNew(i)} style={{ background:"none", border:"none", color:T.red, fontSize:16, cursor:"pointer", padding:"0 4px" }} title="Remove">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* File picker */}
+        <label style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, border:`2px dashed ${T.border}`, borderRadius:8, padding:"10px 14px", cursor:"pointer", fontSize:12, color:T.muted }}>
+          <span style={{ fontSize:18 }}>📁</span>
+          <span>Click to add files &nbsp;<span style={{ color:T.light }}>— images, PDF, Word, Excel (multiple allowed)</span></span>
+          <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={addFiles} style={{ display:"none" }} />
+        </label>
+        {!hasEvidence&&<div style={{ fontSize:11, color:T.red, marginTop:4 }}>⚠ At least one evidence file is required to complete the CAP.</div>}
+      </div>
+
+      {allFilled&&<div style={{ background:T.greenLt, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:14 }}>✓ All fields complete -- CAR will be set to <strong>Pending Verification</strong> upon save.</div>}
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn onClick={()=>onSave(form, newFiles)}>Submit CAP</Btn>
+      </div>
+    </ModalShell>
+  );
+};
+
+// ─── Verification Form Modal ──────────────────────────────────
+const VerificationModal = ({ car, cap, verif, onSave, onClose }) => {
+  const [form, setForm] = useState(verif ? {...verif} : {
+    id:`VRF-${String(Date.now()).slice(-6)}`, car_id:car?.id,
+    immediate_action_ok:false, root_cause_ok:false,
+    corrective_action_ok:false, preventive_action_ok:false,
+    evidence_ok:false, recurrence_prevented:false,
+    effectiveness_rating:"Pending", status:"Pending",
+  });
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const allChecked = form.immediate_action_ok&&form.root_cause_ok&&form.corrective_action_ok&&form.preventive_action_ok&&form.evidence_ok;
+  const checks = [
+    {key:"immediate_action_ok",   label:"Immediate action was adequate and implemented"},
+    {key:"root_cause_ok",         label:"Root cause has been correctly identified"},
+    {key:"corrective_action_ok",  label:"Corrective action addresses the root cause"},
+    {key:"preventive_action_ok",  label:"Preventive action prevents recurrence"},
+    {key:"evidence_ok",           label:"Evidence of closure is satisfactory"},
+    {key:"recurrence_prevented",  label:"Recurrence of the finding is prevented"},
+  ];
+  return (
+    <ModalShell title={`CAPA Verification - ${car?.id}`} onClose={onClose} wide>
+      <div style={{ background:T.primaryLt, borderRadius:8, padding:"10px 14px", marginBottom:16, fontSize:12, color:T.primaryDk }}>
+        <strong>Finding:</strong> {car?.finding_description} &nbsp;|&nbsp; <strong>Clause:</strong> {car?.qms_clause}
+      </div>
+      {cap&&(
+        <div style={{ background:"#f8fafc", borderRadius:8, padding:"12px 14px", marginBottom:16, fontSize:12 }}>
+          <div style={{ fontWeight:600, color:T.text, marginBottom:8 }}>CAP Summary</div>
+          <div><strong>Immediate Action:</strong> {cap.immediate_action}</div>
+          <div style={{ marginTop:4 }}><strong>Root Cause:</strong> {cap.root_cause_analysis}</div>
+          <div style={{ marginTop:4 }}><strong>Corrective Action:</strong> {cap.corrective_action}</div>
+          <div style={{ marginTop:4 }}><strong>Preventive Action:</strong> {cap.preventive_action}</div>
+          {(()=>{
+            let fs=[];try{fs=JSON.parse(cap.evidence_files||"[]");}catch{}
+            if(!cap.evidence_files&&cap.evidence_filename) fs=[{name:cap.evidence_filename}];
+            return fs.length>0&&<div style={{ marginTop:4, color:T.green }}>
+              <strong>Evidence ({fs.length} file{fs.length!==1?"s":""}):</strong> {fs.map(f=>f.name).join(", ")}
+            </div>;
+          })()}
+        </div>
+      )}
+      <div style={{ fontWeight:600, fontSize:13, color:T.text, marginBottom:10 }}>Verification Checklist</div>
+      {checks.map(c=><Checkbox key={c.key} label={c.label} checked={!!form[c.key]} onChange={()=>set(c.key,!form[c.key])} />)}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px", marginTop:8 }}>
+        <Select label="Effectiveness Rating" value={form.effectiveness_rating||""} onChange={e=>set("effectiveness_rating",e.target.value)}>
+          {["Pending","Effective","Not Effective"].map(o=><option key={o}>{o}</option>)}
+        </Select>
+        <Select label="Final Status" value={form.status||""} onChange={e=>set("status",e.target.value)}>
+          {["Pending","Closed","Overdue"].map(o=><option key={o}>{o}</option>)}
+        </Select>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Verifier Comments" value={form.verifier_comments||""} onChange={e=>set("verifier_comments",e.target.value)} />
+        </div>
+      </div>
+      {allChecked&&form.status==="Closed"&&<div style={{ background:T.greenLt, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:14 }}>✓ All checklist items verified -- CAR will be marked <strong>Closed</strong>.</div>}
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn variant="success" onClick={()=>onSave(form)}>Submit Verification</Btn>
+      </div>
+    </ModalShell>
+  );
+};
+
+// ─── Generic Modal Shell ──────────────────────────────────────
+const ModalShell = ({ title, children, onClose, wide }) => (
+  <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={onClose}>
+    <div style={{ background:"#fff", borderRadius:14, padding:28, width:wide?680:480, maxHeight:"90vh", overflowY:"auto", animation:"fadeIn 0.2s ease", boxShadow:"0 8px 40px rgba(0,0,0,0.15)" }} onClick={e=>e.stopPropagation()}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <h2 style={{ fontFamily:"'Oxanium',sans-serif", fontSize:18, fontWeight:700, color:T.primaryDk }}>{title}</h2>
+        <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, color:T.muted, cursor:"pointer" }}>✕</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+
+// ─── Pegasus Letterhead ───────────────────────────────────────
+const PegasusLetterhead = () => (
+  <div style={{ borderBottom:`2px solid #01579b`, paddingBottom:14, marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+    <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:22, color:"#01579b", letterSpacing:1 }}>✈ Pegasus Flyers (E.A.) Ltd.</div>
+    <div style={{ textAlign:"right" }}>
+      <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:13, color:"#01579b" }}>CORRECTIVE ACTION REQUEST</div>
+      <div style={{ fontSize:10, color:"#5f7285", marginTop:2 }}>P.O Box 3341-00100 Wilson Airport, Nairobi Kenya</div>
+      <div style={{ fontSize:10, color:"#5f7285" }}>Tel: +254206001467/8 · Email: pegasus@africaonline.co.ke</div>
+    </div>
+  </div>
+);
+
+// ─── CAPA Detail / Progress Modal ────────────────────────────
+const CAPADetailModal = ({ car, cap, verif, allCaps, allVerifs, onPDF, onClose }) => {
+  const steps = [
+    { label:"CAR Raised",           done:true,                                  active:car.status==="Open" },
+    { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Overdue"].includes(car.status), active:car.status==="In Progress" },
+    { label:"Pending Verification", done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), active:car.status==="Pending Verification" },
+    { label:"Returned for Resubmission", done:["Returned for Resubmission"].includes(car.status), active:car.status==="Returned for Resubmission", warn:true },
+    { label:"Closed",               done:car.status==="Closed",                 active:car.status==="Closed" },
+  ];
+  const checkItem = (ok, label) => (
+    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+      <div style={{ width:18,height:18,borderRadius:"50%",background:ok?"#e8f5e9":"#fff",border:`2px solid ${ok?"#2e7d32":"#dde3ea"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+        {ok&&<span style={{ color:"#2e7d32",fontSize:10,fontWeight:700 }}>✓</span>}
+      </div>
+      <span style={{ fontSize:12,color:ok?"#2e7d32":"#8fa0b0" }}>{label}</span>
+    </div>
+  );
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:"#fff",borderRadius:14,width:780,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 8px 50px rgba(0,0,0,0.2)",animation:"fadeIn 0.2s ease" }} onClick={e=>e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ background:`linear-gradient(135deg,#01579b,#0277bd)`,padding:"18px 24px",borderRadius:"14px 14px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontFamily:"'Source Code Pro',monospace",color:"rgba(255,255,255,0.7)",fontSize:11 }}>CAPA PROGRESS REPORT</div>
+            <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:20,color:"#fff",letterSpacing:0.5 }}>{car.id}</div>
+          </div>
+          <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+            <Btn size="sm" onClick={onPDF} style={{ background:"rgba(255,255,255,0.15)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)" }}>📄 Export PDF</Btn>
+            <button onClick={onClose} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer" }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ padding:24 }}>
+          {/* Letterhead */}
+          <PegasusLetterhead />
+
+          {/* Progress tracker */}
+          {(()=>{
+            const isReturned = car.status==="Returned for Resubmission";
+            // Steps: CAR Raised -> In Progress -> Pending Verification -> Closed
+            // When returned: Pending Verification bullet goes red, connector between
+            // In Progress and Pending Verification turns red with backward arrows
+            const trackerSteps = [
+              { label:"CAR Raised",           done:true,          color:"#01579b" },
+              { label:"In Progress",          done:["In Progress","Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color:"#01579b" },
+              { label:"Pending Verification", done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), color:isReturned?"#c62828":"#01579b" },
+              { label:"Closed",               done:car.status==="Closed", color:"#2e7d32" },
+            ];
+            return (
+              <div style={{ marginBottom:24, background:"#f5f8fc", borderRadius:10, padding:"14px 20px" }}>
+                <div style={{ display:"flex", alignItems:"center" }}>
+                  {trackerSteps.map((s,i)=>(
+                    <div key={s.label} style={{ display:"flex", alignItems:"center", flex:i<trackerSteps.length-1?1:"auto" }}>
+                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                        <div style={{ width:32,height:32,borderRadius:"50%",
+                          background:s.done?s.color:"#eef2f7",
+                          border:`2px solid ${s.done?s.color:"#dde3ea"}`,
+                          display:"flex",alignItems:"center",justifyContent:"center" }}>
+                          {s.done
+                            ? <span style={{ color:"#fff",fontSize:14,fontWeight:700 }}>{(isReturned&&s.label==="Pending Verification")?"✕":"✓"}</span>
+                            : <span style={{ width:8,height:8,borderRadius:"50%",background:"#dde3ea",display:"block" }}/>}
+                        </div>
+                        <div style={{ fontSize:10,fontWeight:600,color:s.done?s.color:T.muted,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+                      </div>
+                      {i<trackerSteps.length-1&&(()=>{
+                        // Connector between In Progress (i=1) and Pending Verification (i=2) goes red when returned
+                        const isReturnConnector = isReturned && i===1;
+                        const lineColor = isReturnConnector ? "#c62828" : (s.done ? "#01579b" : "#dde3ea");
+                        return (
+                          <div style={{ flex:1, margin:"0 8px", marginBottom:18, position:"relative" }}>
+                            <div style={{ height:3, background:lineColor, borderRadius:2, position:"relative" }}>
+                              {isReturnConnector&&(
+                                <>
+                                  {/* Backward arrows on the line */}
+                                  <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", fontSize:14, color:"#c62828", lineHeight:1 }}>
+                                    &#8678;&#8678;
+                                  </div>
+                                  {/* Label below the line */}
+                                  <div style={{ position:"absolute", top:8, left:0, right:0, textAlign:"center", fontSize:9, fontWeight:700, color:"#c62828", textTransform:"uppercase", letterSpacing:0.5, whiteSpace:"nowrap" }}>
+                                    CAP Returned
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ))}
+                </div>
+                {isReturned&&(
+                  <div style={{ marginTop:16, padding:"8px 14px", background:"#ffebee", borderRadius:6, border:"1px solid #ffcdd2", fontSize:12, color:"#c62828", fontWeight:600, textAlign:"center" }}>
+                    ✕ CAP reviewed and returned for resubmission — awaiting revised CAP from responsible manager
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* CAR Details */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
+            <div style={{ background:"#f5f8fc",borderRadius:10,padding:16,gridColumn:"1/-1" }}>
+              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>Description of Finding</div>
+              <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{car.finding_description||"—"}</div>
+            </div>
+            <div style={{ background:"#f5f8fc",borderRadius:10,padding:16,gridColumn:"1/-1" }}>
+              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:8 }}>QMS Clause Reference</div>
+              <div style={{ fontSize:13,color:T.text,lineHeight:1.6,fontFamily:"'Source Code Pro',monospace" }}>{car.qms_clause||"—"}</div>
+            </div>
+            {[
+              ["CAR Number",car.id,true],["Date Raised",fmt(car.date_raised),false],
+              ["Severity",null,false,car.severity],["Status",null,false,car.status],
+              ["Department",car.department,false],["Due Date",fmt(car.due_date),false],
+              ["Responsible Manager",car.responsible_manager,false],["Raised By",car.raised_by_name,false],
+            ].map(([label,val,mono,badge])=>(
+              <div key={label} style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 14px" }}>
+                <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:4 }}>{label}</div>
+                {badge ? <Badge label={badge}/> : <div style={{ fontSize:13,color:T.text,fontFamily:mono?"'Source Code Pro',monospace":"inherit",fontWeight:mono?600:400 }}>{val||"--"}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* CAP History */}
+          {(()=>{
+            const caps = allCaps&&allCaps.length>0 ? allCaps : (cap?[cap]:[]);
+            return (
+              <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18,marginBottom:18 }}>
+                <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk,marginBottom:14 }}>
+                  Corrective Action Plan History {caps.length>1&&<span style={{ fontSize:12,fontWeight:400,color:T.muted,marginLeft:8 }}>({caps.length} submissions)</span>}
+                </div>
+                {caps.length===0
+                  ? <div style={{ background:"#fff3e0",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.yellow }}>⏳ CAP not yet submitted by the responsible manager.</div>
+                  : caps.map((c,idx)=>{
+                    let files=[]; try{files=JSON.parse(c.evidence_files||"[]");}catch{}
+                    if(!c.evidence_files&&c.evidence_filename) files=[{name:c.evidence_filename,url:c.evidence_url}];
+                    const isRejected = idx < caps.length-1; // all but last are rejected
+                    return (
+                      <div key={c.id||idx} style={{ marginBottom:16,border:`2px solid ${isRejected?"#ffcdd2":"#c8e6c9"}`,borderRadius:10,overflow:"hidden" }}>
+                        <div style={{ padding:"8px 14px",background:isRejected?"#ffebee":"#e8f5e9",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                          <div style={{ fontSize:12,fontWeight:700,color:isRejected?"#c62828":"#2e7d32",textTransform:"uppercase",letterSpacing:0.5 }}>
+                            {caps.length>1?`Submission ${idx+1} of ${caps.length}`:"CAP Submission"} {isRejected&&"— Returned for Resubmission"}
+                          </div>
+                          <div style={{ fontSize:11,color:T.muted }}>{c.submitted_at?new Date(c.submitted_at).toLocaleString():""} · {c.submitted_by_name||"--"}</div>
+                        </div>
+                        <div style={{ padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                          {[["Immediate Corrective Action",c.immediate_action,true],["Root Cause Analysis",c.root_cause_analysis,true],["Corrective Action",c.corrective_action,true],["Preventive Action",c.preventive_action,true]].map(([label,val,full])=>(
+                            <div key={label} style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:full?"1/-1":"auto" }}>
+                              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:4 }}>{label}</div>
+                              <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{val||"--"}</div>
+                            </div>
+                          ))}
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:"1/-1" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8 }}>Evidence of Closure</div>
+                            {files.length>0
+                              ? <div style={{ display:"flex",flexDirection:"column",gap:6 }}>
+                                  {files.map((f,fi)=>(
+                                    <div key={fi} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:isRejected?"#ffebee":"#e8f5e9",borderRadius:6,padding:"7px 12px" }}>
+                                      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                                        <span>📎</span>
+                                        <span style={{ fontSize:13,color:isRejected?"#c62828":T.green,fontWeight:600 }}>{f.name}</span>
+                                      </div>
+                                      {f.url&&!f.url.startsWith("data:")&&<a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize:12,color:T.primary,fontWeight:600 }}>🔗 View</a>}
+                                    </div>
+                                  ))}
+                                </div>
+                              : <div style={{ fontSize:13,color:T.muted }}>-- No evidence uploaded</div>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                }
+              </div>
+            );
+          })()}
+
+          {/* Verification History */}
+          {(()=>{
+            const verifs = allVerifs&&allVerifs.length>0 ? allVerifs : (verif?[verif]:[]);
+            return (
+              <div style={{ borderTop:`2px solid ${T.border}`,paddingTop:18 }}>
+                <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:700,fontSize:16,color:T.primaryDk,marginBottom:14 }}>
+                  CAPA Verification History {verifs.length>1&&<span style={{ fontSize:12,fontWeight:400,color:T.muted,marginLeft:8 }}>({verifs.length} reviews)</span>}
+                </div>
+                {verifs.length===0
+                  ? <div style={{ background:"#e3f2fd",borderRadius:8,padding:"14px 18px",fontSize:13,color:T.primary }}>⏳ Verification not yet completed by the Quality Manager.</div>
+                  : verifs.map((v,idx)=>{
+                    const isRejection = v.effectiveness_rating==="Not Effective";
+                    return (
+                      <div key={v.id||idx} style={{ marginBottom:16,border:`2px solid ${isRejection?"#ffcdd2":"#c8e6c9"}`,borderRadius:10,overflow:"hidden" }}>
+                        <div style={{ padding:"8px 14px",background:isRejection?"#ffebee":"#e8f5e9",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                          <div style={{ fontSize:12,fontWeight:700,color:isRejection?"#c62828":"#2e7d32",textTransform:"uppercase",letterSpacing:0.5 }}>
+                            {verifs.length>1?`Review ${idx+1} of ${verifs.length}`:"Verification"} — {isRejection?"Returned for Resubmission":"Effective"}
+                          </div>
+                          <div style={{ fontSize:11,color:T.muted }}>{v.verified_at?new Date(v.verified_at).toLocaleString():""} · {v.verified_by_name||"--"}</div>
+                        </div>
+                        <div style={{ padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:"1/-1" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8 }}>Verification Checklist</div>
+                            {checkItem(v.immediate_action_ok,"Immediate action adequate")}
+                            {checkItem(v.root_cause_ok,"Root cause correctly identified")}
+                            {checkItem(v.corrective_action_ok,"Corrective action addresses root cause")}
+                            {checkItem(v.preventive_action_ok,"Preventive action prevents recurrence")}
+                            {checkItem(v.evidence_ok,"Evidence of closure satisfactory")}
+                            {checkItem(v.recurrence_prevented,"Recurrence prevented")}
+                          </div>
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Effectiveness Rating</div>
+                            <Badge label={v.effectiveness_rating}/>
+                          </div>
+                          <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px" }}>
+                            <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Verified By</div>
+                            <div style={{ fontSize:13,color:T.text }}>{v.verified_by_name||"--"}</div>
+                          </div>
+                          {v.verifier_comments&&(
+                            <div style={{ background:"#f5f8fc",borderRadius:8,padding:"10px 12px",gridColumn:"1/-1" }}>
+                              <div style={{ fontSize:10,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6 }}>Comments</div>
+                              <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>{v.verifier_comments}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                }
+              </div>
+            );
+          })()}
+
+          {/* Footer */}
+          <div style={{ marginTop:20,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <div style={{ fontSize:11,color:T.muted }}>Pegasus Flyers (E.A.) Ltd. · QMS Document · {new Date().toLocaleDateString("en-GB")}</div>
+            <Btn size="sm" onClick={onPDF}>📄 Export PDF Report</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ─── CARs Table View ──────────────────────────────────────────
+const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
+  const [modal, setModal]   = useState(null); // null | 'car' | 'cap' | 'verify'
+  const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+
+  const filtered = data.cars
+    .filter(c => filter==="all"||c.status===filter)
+    .filter(c => !search || JSON.stringify(c).toLowerCase().includes(search.toLowerCase()));
+
+  const canRaiseCAR = ["admin","quality_manager","quality_auditor"].includes(profile?.role);
+
+  const saveCar = async(form) => {
+    const isNew = !data.cars.find(c=>c.id===form.id);
+    const payload = {...form, title: form.finding_description?.slice(0,80)||form.id, updated_at:new Date().toISOString()};
+    delete payload.additional_notify_text;
+    if(isNew) {
+      payload.raised_by=user.id; payload.raised_by_name=profile?.full_name||user.email;
+      const{error}=await supabase.from(TABLES.cars).insert(payload);
+      if(error){showToast(`Error: ${error.message}`,"error");return;}
+      await logChange({user,action:"created",table:"cars",recordId:form.id,recordTitle:form.title||form.id,newData:form});
+      const carRm=managers.find(m=>m.role_title===form.responsible_manager); const extraEmails=(form.additional_notify_text||"").split(",").map(s=>s.trim()).filter(Boolean); await sendNotification({type:"car_raised",record:{...form,raised_by_name:profile?.full_name||user.email},recipients:[carRm?.email,...extraEmails].filter(Boolean)});
+      showToast("CAR raised -- responsible manager notified","success");
+    } else {
+      const{error}=await supabase.from(TABLES.cars).update(payload).eq("id",form.id);
+      if(error){showToast(`Error: ${error.message}`,"error");return;}
+      await logChange({user,action:"updated",table:"cars",recordId:form.id,recordTitle:form.title||form.id,newData:form});
+      showToast("CAR updated","success");
+    }
+    setModal(null); onRefresh();
+  };
+
+  const saveCap = async(form, newFiles) => {
+    // Upload helper -- tries Supabase storage, falls back to base64
+    const uploadOne = async(file) => {
+      try {
+        await supabase.storage.createBucket("capa-evidence",{public:true}).catch(()=>{});
+        const path=`evidence/${selected.id}/${Date.now()}_${file.name}`;
+        const{error:ue}=await supabase.storage.from("capa-evidence").upload(path,file,{upsert:true,contentType:file.type});
+        if(!ue){
+          const{data:urlData}=supabase.storage.from("capa-evidence").getPublicUrl(path);
+          return {name:file.name, url:urlData.publicUrl, size:file.size, type:file.type};
+        }
+        // fallback: base64
+        const reader=new FileReader();
+        const dataUrl=await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result);reader.onerror=rej;reader.readAsDataURL(file);});
+        return {name:file.name, url:dataUrl, size:file.size, type:file.type, inline:true};
+      } catch(e){
+        console.warn("Upload failed for",file.name,e);
+        return null;
+      }
+    };
+
+    // Start from existing saved files
+    let existingFiles = [];
+    try { existingFiles=JSON.parse(form.evidence_files||"[]"); } catch{}
+    // Also migrate any legacy single-file evidence
+    if(!form.evidence_files && form.evidence_filename){
+      existingFiles=[{name:form.evidence_filename, url:form.evidence_url}];
+    }
+
+    // Upload all new files in parallel
+    if(newFiles && newFiles.length>0){
+      showToast(`Uploading ${newFiles.length} file(s)…`,"success");
+      const results = await Promise.all(newFiles.map(uploadOne));
+      const uploaded = results.filter(Boolean);
+      existingFiles = [...existingFiles, ...uploaded];
+      showToast(`${uploaded.length} file(s) uploaded`,"success");
+    }
+
+    const evidence_files = JSON.stringify(existingFiles);
+    // Keep legacy fields populated from first file for backwards compat
+    const firstFile = existingFiles[0];
+    const evidence_url      = firstFile?.url || "";
+    const evidence_filename = firstFile?.name || "";
+
+    const hasEvidence = existingFiles.length>0;
+    const allFilled = form.immediate_action&&form.root_cause_analysis&&form.corrective_action&&form.preventive_action&&hasEvidence;
+    const isResubmission = selected.status==="Returned for Resubmission";
+    const capId = isResubmission ? `${selected.id}-cap-${Date.now()}` : form.id;
+    const capPayload={...form,id:capId,evidence_files,evidence_url,evidence_filename,submitted_by:user.id,submitted_by_name:profile?.full_name||user.email,submitted_at:new Date().toISOString(),status:allFilled?"Complete":"Pending"};
+    const{error}=await supabase.from(TABLES.caps).upsert(capPayload);
+    if(error){showToast(`Error saving CAP: ${error.message}`,"error");return;}
+    if(allFilled){
+      await supabase.from(TABLES.cars).update({status:"Pending Verification",updated_at:new Date().toISOString()}).eq("id",selected.id);
+      const qm=managers.find(m=>m.role_title==="Quality Manager");
+      await sendNotification({type:"cap_submitted",record:{...selected,...form},recipients:[qm?.email].filter(Boolean)});
+      showToast("CAP submitted -- Quality Manager notified","success");
+    } else {
+      await supabase.from(TABLES.cars).update({status:"In Progress",updated_at:new Date().toISOString()}).eq("id",selected.id);
+      showToast("CAP saved","success");
+    }
+    await logChange({user,action:"submitted CAP",table:"caps",recordId:form.id,recordTitle:selected.id,newData:form});
+    setModal(null); onRefresh();
+  };
+
+  const saveVerification = async(form) => {
+    // If QM marks Not Effective, return CAR for resubmission rather than closing
+    const carStatus = form.effectiveness_rating==="Not Effective"
+      ? "Returned for Resubmission"
+      : form.status;
+    const verifId = `${selected.id}-verif-${Date.now()}`;
+    const payload={...form,id:verifId,verified_by:user.id,verified_by_name:profile?.full_name||user.email,verified_at:new Date().toISOString()};
+    const{error}=await supabase.from(TABLES.verifications).insert(payload);
+    if(error){showToast(`Error: ${error.message}`,"error");return;}
+    await supabase.from(TABLES.cars).update({status:carStatus,updated_at:new Date().toISOString()}).eq("id",selected.id);
+    const rm=managers.find(m=>m.role_title===selected.responsible_manager);
+    await logChange({user,action:"verified CAPA",table:"capa_verifications",recordId:form.id,recordTitle:selected.id,newData:form});
+    const toastMsg = form.effectiveness_rating==="Not Effective"
+      ? "CAP returned for resubmission -- responsible manager notified"
+      : "Verification submitted -- CAR closed";
+    const notifType = form.effectiveness_rating==="Not Effective" ? "returned_for_resubmission" : "verification_submitted";
+    await sendNotification({type:notifType,record:{...selected,...form},recipients:[rm?.email].filter(Boolean)});
+    showToast(toastMsg, form.effectiveness_rating==="Not Effective"?"error":"success");
+    setModal(null); onRefresh();
+  };
+
+  const getCAP      = (carId) => data.caps?.find(c=>c.car_id===carId); // latest
+  const getVerif    = (carId) => data.verifications?.find(v=>v.car_id===carId); // latest
+  const getAllCAPs   = (carId) => (data.caps?.filter(c=>c.car_id===carId)||[]).sort((a,b)=>new Date(a.submitted_at||a.created_at)-new Date(b.submitted_at||b.created_at));
+  const getAllVerifs = (carId) => (data.verifications?.filter(v=>v.car_id===carId)||[]).sort((a,b)=>new Date(a.verified_at||a.created_at)-new Date(b.verified_at||b.created_at));
+
+  const generateReport = async(car) => {
+    const{jsPDF}=await import("jspdf");
+    const{default:autoTable}=await import("jspdf-autotable");
+    const cap=getCAP(car.id); const verif=getVerif(car.id);
+    const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const W=210; const margin=14; const col=W-margin*2;
+
+    // ── helpers ──
+    const LINE_H=4.5; // line height for 9pt text
+    const LABEL_SZ=6.5; const BODY_SZ=9;
+
+    const sectionTitle=(text,y,color=[1,87,155])=>{
+      doc.setFillColor(...color); doc.rect(margin,y,col,7,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ+1); doc.setTextColor(255,255,255);
+      doc.text(text,margin+3,y+4.8); doc.setTextColor(0,0,0);
+      return y+9;
+    };
+
+    // Draws a labelled box that auto-sizes to its content. Returns bottom y.
+    const box=(label,value,x,y,w)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+      const lines=doc.splitTextToSize(String(value||"—"),w-5);
+      const textH=lines.length*LINE_H;
+      const h=5+4+textH+3; // top-pad + label + text + bottom-pad
+      doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
+      doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text(label.toUpperCase(),x+2.5,y+4);
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+      doc.text(lines,x+2.5,y+4+LINE_H+1);
+      return y+h+2;
+    };
+
+    // Draws a pair of equal-width boxes on the same row. Returns bottom y.
+    const boxRow=(pairs,x,y,totalW)=>{
+      const gap=2; const n=pairs.length; const w=(totalW-(n-1)*gap)/n;
+      // Calculate the max height needed across all boxes in this row
+      let maxH=0;
+      pairs.forEach(([,val])=>{
+        doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+        const lines=doc.splitTextToSize(String(val||"—"),w-5);
+        const h=5+4+lines.length*LINE_H+3;
+        if(h>maxH) maxH=h;
+      });
+      pairs.forEach(([label,val],i)=>{
+        const bx=x+i*(w+gap);
+        doc.setFillColor(245,248,252); doc.rect(bx,y,w,maxH,"F");
+        doc.setDrawColor(221,227,234); doc.rect(bx,y,w,maxH,"S");
+        doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+        doc.text(label.toUpperCase(),bx+2.5,y+4);
+        doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+        const lines=doc.splitTextToSize(String(val||"—"),w-5);
+        doc.text(lines,bx+2.5,y+4+LINE_H+1);
+      });
+      return y+maxH+2;
+    };
+
+    // ── Page overflow guard ──
+    // jsPDF doesn't auto-paginate — we must check before every draw call.
+    // usable page height = 287 (leaving room for footer)
+    const FOOTER_Y=287; const NEW_PAGE_Y=20;
+    const needPage=(currentY,neededH=20)=>{
+      if(currentY+neededH>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; }
+      return currentY;
+    };
+
+    const checkRow=(label,ok,x,y,w)=>{
+      const bgR=ok?232:245; const bgG=ok?245:248; const bgB=ok?233:252;
+      doc.setFillColor(bgR,bgG,bgB); doc.rect(x,y,w,7,"F");
+      doc.setDrawColor(221,227,234); doc.rect(x,y,w,7,"S");
+      // Use text marker instead of unicode to avoid encoding issues
+      doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.setTextColor(ok?46:180,ok?125:180,ok?50:180);
+      doc.text(ok?"[x]":"[ ]",x+2.5,y+5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(26,35,50);
+      doc.text(label,x+14,y+5);
+      return y+8;
+    };
+
+    let y=margin;
+
+    // ── Letterhead ──
+    doc.setFillColor(1,87,155); doc.rect(0,0,W,18,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(255,255,255);
+    doc.text("AeroQualify Pro",margin,12);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(200,220,255);
+    doc.text("CAPA PROGRESS REPORT",margin+52,12);
+    doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi  |  +254206001467/8",W-margin,9,{align:"right"});
+    doc.text("Generated: "+new Date().toLocaleDateString("en-GB"),W-margin,14,{align:"right"});
+    y=24;
+
+    // ── CAR Header bar ──
+    doc.setFillColor(0,60,113); doc.rect(margin,y,col,10,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+    doc.text("CAR: "+car.id,margin+4,y+7);
+    // status pill — right aligned, text only (avoid roundedRect encoding issues)
+    const sc={Open:[198,40,40],"In Progress":[230,81,0],"Pending Verification":[69,39,160],Closed:[46,125,50],Overdue:[198,40,40],"Returned for Resubmission":[183,28,28]};
+    const sCol=sc[car.status]||[95,114,133];
+    doc.setFillColor(...sCol); doc.rect(W-margin-34,y+2,32,6,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
+    doc.text(car.status,W-margin-34+16,y+6.2,{align:"center"});
+    y+=14;
+
+    // ── Progress Tracker ──
+    doc.setFillColor(245,248,252); doc.rect(margin,y,col,16,"F");
+    doc.setDrawColor(221,227,234); doc.rect(margin,y,col,16,"S");
+    const isReturned = car.status==="Returned for Resubmission";
+    const steps=[
+      {label:"CAR RAISED",     done:true,  rejected:false},
+      {label:"IN PROGRESS",    done:["In Progress","Pending Verification","Closed","Overdue","Returned for Resubmission"].includes(car.status), rejected:false},
+      {label:"PEND. VERIF.",   done:["Pending Verification","Closed","Returned for Resubmission"].includes(car.status), rejected:isReturned},
+      {label:"CLOSED",         done:car.status==="Closed", rejected:false},
+    ];
+    const stepW=col/steps.length;
+    steps.forEach((s,i)=>{
+      const cx=margin+stepW*i+stepW/2; const cy=y+7;
+      // connector line
+      if(i<steps.length-1){
+        // Connector between IN PROGRESS (i=1) and PEND. VERIF. (i=2) is red when returned
+        const isReturnConnector = isReturned && i===1;
+        doc.setLineWidth(isReturnConnector?2:1.5);
+        if(isReturnConnector){
+          doc.setDrawColor(198,40,40);
+          doc.line(cx+5,cy,cx+stepW-5,cy);
+          // backward arrow text above line
+          doc.setFont("helvetica","bold"); doc.setFontSize(6);
+          doc.setTextColor(198,40,40);
+          doc.text("<< CAP RETURNED",cx+stepW/2,cy-3,{align:"center"});
+        } else {
+          doc.setDrawColor(s.done?1:210, s.done?87:210, s.done?155:210);
+          doc.line(cx+5,cy,cx+stepW-5,cy);
+        }
+      }
+      // circle fill — red if rejected step, blue if done, grey if pending
+      if(s.rejected){
+        doc.setFillColor(198,40,40);
+      } else {
+        doc.setFillColor(s.done?1:220, s.done?87:230, s.done?155:240);
+      }
+      doc.circle(cx,cy,4,"F");
+      if(s.rejected){
+        doc.setDrawColor(183,28,28);
+      } else {
+        doc.setDrawColor(s.done?1:200, s.done?87:210, s.done?155:220);
+      }
+      doc.setLineWidth(0.5); doc.circle(cx,cy,4,"S");
+      // marker inside circle
+      doc.setFont("helvetica","bold"); doc.setFontSize(6);
+      doc.setTextColor(s.done||s.rejected?255:150, 255, s.done&&!s.rejected?255:s.rejected?255:170);
+      doc.text(s.rejected?"X":s.done?"OK":"--",cx,cy+2,{align:"center"});
+      // label below — red if rejected
+      doc.setFont("helvetica","bold"); doc.setFontSize(5.5);
+      if(s.rejected){ doc.setTextColor(198,40,40); }
+      else { doc.setTextColor(s.done?1:140, s.done?87:150, s.done?155:160); }
+      doc.text(s.label,cx,y+15,{align:"center"});
+      // extra label under rejected step
+      if(s.rejected){
+        doc.setFontSize(4.5); doc.setTextColor(198,40,40);
+        doc.text("RETURNED",cx,y+19,{align:"center"});
+      }
+    });
+    y+=22;
+
+    // Helper: estimate box height without drawing (used for page overflow checks)
+    const estBoxH=(value,w)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(9);
+      const lines=doc.splitTextToSize(String(value||"—"),w-5);
+      return Math.max(14,5+4+lines.length*LINE_H+3+2);
+    };
+
+    // ── Section 1: CAR Details ──
+    y=needPage(y,12);
+    y=sectionTitle("SECTION 1 — CORRECTIVE ACTION REQUEST (CAR)",y);
+    y=needPage(y,estBoxH(car.finding_description,col)); y=box("Description of Finding",car.finding_description,margin,y,col);
+    y=needPage(y,estBoxH(car.qms_clause,col));          y=box("QMS Clause Reference",car.qms_clause,margin,y,col);
+    y=needPage(y,14); y=boxRow([["CAR Number",car.id],["Date Raised",fmt(car.date_raised)]],margin,y,col);
+    y=needPage(y,14); y=boxRow([["Severity",car.severity],["Status",car.status]],margin,y,col);
+    y=needPage(y,14); y=boxRow([["Department",car.department],["Due Date",fmt(car.due_date)]],margin,y,col);
+    y=needPage(y,14); y=boxRow([["Responsible Manager",car.responsible_manager],["Raised By",car.raised_by_name]],margin,y,col);
+    y+=4;
+
+    // ── Section 2: CAP ──
+    y=needPage(y,12);
+    y=sectionTitle("SECTION 2 -- CORRECTIVE ACTION PLAN (CAP)",y,[0,105,92]);
+    if(cap){
+      const cap2Fields=[
+        ["Immediate Corrective Action",cap.immediate_action],
+        ["Root Cause Analysis",cap.root_cause_analysis],
+        ["Corrective Action",cap.corrective_action],
+        ["Preventive Action",cap.preventive_action],
+      ];
+      cap2Fields.forEach(([label,val])=>{
+        y=needPage(y,estBoxH(val,col));
+        y=box(label,val,margin,y,col);
+      });
+      let evFiles2=[];
+      try{evFiles2=JSON.parse(cap.evidence_files||"[]");}catch{}
+      if(!cap.evidence_files&&cap.evidence_filename) evFiles2=[{name:cap.evidence_filename,url:cap.evidence_url}];
+      const evVal=evFiles2.length>0
+        ?evFiles2.map((f,i)=>`${i+1}. ${f.name}`).join("\n")
+        :"\u2014 No evidence uploaded";
+      y=needPage(y,estBoxH(evVal,col)+4);
+      y=box(`Evidence of Closure (${evFiles2.length} file${evFiles2.length!==1?"s":""})`,evVal,margin,y,col);
+      evFiles2.forEach(f=>{
+        if(f.url&&!f.url.startsWith("data:")){
+          y=needPage(y,6);
+          doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(1,87,155);
+          doc.textWithLink("  Open: "+f.name,margin+2.5,y-1,{url:f.url});
+          doc.setTextColor(0,0,0); y+=4;
+        }
+      });
+      y=needPage(y,14);
+      y=boxRow([["Submitted By",cap.submitted_by_name||"—"],["Submitted At",cap.submitted_at?new Date(cap.submitted_at).toLocaleString():"—"]],margin,y,col);
+    } else {
+      y=needPage(y,14);
+      doc.setFillColor(255,243,224); doc.rect(margin,y,col,10,"F");
+      doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(230,81,0);
+      doc.text("CAP not yet submitted by the responsible manager.",margin+4,y+6.5); y+=12;
+    }
+    y+=4;
+
+    // ── Section 3: Verification ──
+    y=needPage(y,12);
+    y=sectionTitle("SECTION 3 — CAPA VERIFICATION",y,[69,39,160]);
+    if(verif){
+      const checks=[
+        ["Immediate action was adequate and implemented",verif.immediate_action_ok],
+        ["Root cause has been correctly identified",verif.root_cause_ok],
+        ["Corrective action addresses the root cause",verif.corrective_action_ok],
+        ["Preventive action prevents recurrence",verif.preventive_action_ok],
+        ["Evidence of closure is satisfactory",verif.evidence_ok],
+        ["Recurrence of the finding is prevented",verif.recurrence_prevented],
+      ];
+      checks.forEach(([label,ok])=>{ y=needPage(y,9); y=checkRow(label,ok,margin,y,col); });
+      y+=2;
+      y=needPage(y,14); y=boxRow([["Effectiveness Rating",verif.effectiveness_rating||"—"],["Final Status",verif.status||"—"]],margin,y,col);
+      y=needPage(y,14); y=boxRow([["Verified By",verif.verified_by_name||"—"],["Verified At",verif.verified_at?new Date(verif.verified_at).toLocaleString():"--"]],margin,y,col);
+      if(verif.verifier_comments){ y=needPage(y,estBoxH(verif.verifier_comments,col)); y=box("Verifier Comments",verif.verifier_comments,margin,y,col); }
+    } else {
+      y=needPage(y,14);
+      doc.setFillColor(227,242,253); doc.rect(margin,y,col,10,"F");
+      doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(1,87,155);
+      doc.text("Verification not yet completed by the Quality Manager.",margin+4,y+6.5); y+=12;
+    }
+    y+=8;
+
+    // ── Signature Section ──
+    y=needPage(y,50);
+    y=sectionTitle("SIGNATURES",y,[26,35,50]);
+    const sigW=(col-6)/2;
+    const qm=managers?.find(m=>m.role_title==="Quality Manager");
+    const am=managers?.find(m=>m.role_title==="Accountable Manager");
+    [[margin,"QUALITY MANAGER",qm?.person_name],[margin+sigW+6,"ACCOUNTABLE MANAGER",am?.person_name]].forEach(([sx,role,name])=>{
+      doc.setFillColor(255,255,255); doc.rect(sx,y,sigW,34,"F");
+      doc.setDrawColor(221,227,234); doc.rect(sx,y,sigW,34,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text(role,sx+3,y+5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+      doc.text(name||"",sx+3,y+12);
+      doc.setDrawColor(180,190,200); doc.setLineWidth(0.3);
+      doc.line(sx+3,y+22,sx+sigW-4,y+22);
+      doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text("Signature",sx+3,y+26);
+      doc.line(sx+3,y+30,sx+sigW-4,y+30);
+      doc.text("Date",sx+3,y+33.5);
+    });
+    y+=40;
+
+    // ── Attach all evidence files as final pages ──────────────────
+    let pdfEvidenceFiles=[];
+    try{pdfEvidenceFiles=JSON.parse(cap?.evidence_files||"[]");}catch{}
+    if(!cap?.evidence_files&&cap?.evidence_filename) pdfEvidenceFiles=[{name:cap.evidence_filename,url:cap.evidence_url}];
+
+    // Track which jsPDF page numbers are evidence pages (for footer labelling)
+    const reportPageCount = doc.getNumberOfPages(); // pages before any evidence
+    const evidencePageMap = {}; // pageNum → {fileIndex, fileName, fileTotal}
+
+    for(let fi=0;fi<pdfEvidenceFiles.length;fi++){
+      const evFile=pdfEvidenceFiles[fi];
+      if(!evFile?.url) continue;
+      try{
+        const ext=(evFile.name.split(".").pop()||"").toLowerCase();
+        const isImage=["jpg","jpeg","png","gif","webp"].includes(ext);
+        const isInline=evFile.url.startsWith("data:");
+
+        if(isImage){
+          let dataUrl=evFile.url;
+          if(!isInline){
+            const resp=await fetch(evFile.url);
+            if(!resp.ok) throw new Error("fetch failed");
+            const blob=await resp.blob();
+            dataUrl=await new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(blob);});
+          }
+          doc.addPage();
+          const pg=doc.getNumberOfPages();
+          evidencePageMap[pg]={fileIndex:fi+1,fileName:evFile.name,fileTotal:pdfEvidenceFiles.length};
+
+          // Dark header bar
+          doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+          doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+          doc.text(`EVIDENCE OF CLOSURE — File ${fi+1} of ${pdfEvidenceFiles.length}`,margin,8);
+          doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(200,210,220);
+          doc.text(evFile.name,W-margin,8,{align:"right"});
+          doc.setFontSize(7); doc.setTextColor(160,180,200);
+          doc.text(`CAR: ${car.id}  |  Evidence of Closure`,margin,14);
+
+          // Image centred between header and footer
+          const imgTop=22; const imgBottom=284;
+          const maxW=W-margin*2; const maxH=imgBottom-imgTop;
+          const imgProps=doc.getImageProperties(dataUrl);
+          let iw=imgProps.width; let ih=imgProps.height;
+          const scale=Math.min(maxW/iw,maxH/ih,1);
+          iw*=scale; ih*=scale;
+          doc.addImage(dataUrl,ext==="png"?"PNG":"JPEG",margin+(maxW-iw)/2,imgTop+(maxH-ih)/2,iw,ih);
+
+        } else if(ext==="pdf"&&!isInline){
+          // Queue PDF files for pdf-lib merge
+          try{
+            if(!window._pdfMergeQueue) window._pdfMergeQueue=[];
+            const resp=await fetch(evFile.url);
+            if(resp.ok) window._pdfMergeQueue.push({
+              name:evFile.name, bytes:await resp.arrayBuffer(),
+              index:fi+1, total:pdfEvidenceFiles.length, carId:car.id
+            });
+          } catch(e){
+            // Fallback reference page
+            doc.addPage();
+            const pg=doc.getNumberOfPages();
+            evidencePageMap[pg]={fileIndex:fi+1,fileName:evFile.name,fileTotal:pdfEvidenceFiles.length};
+            doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+            doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+            doc.text(`EVIDENCE OF CLOSURE -- File ${fi+1} of ${pdfEvidenceFiles.length}`,margin,8);
+            doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(200,210,220);
+            doc.text(evFile.name,W-margin,8,{align:"right"});
+            doc.setFontSize(7); doc.setTextColor(160,180,200);
+            doc.text(`CAR: ${car.id}  |  Evidence of Closure`,margin,14);
+            doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+            doc.text(evFile.name+" (PDF — open separately via link below)",margin,32);
+            doc.setTextColor(1,87,155); doc.textWithLink("Click to open",margin,42,{url:evFile.url});
+          }
+        } else {
+          // Other file types -- reference page
+          doc.addPage();
+          const pg=doc.getNumberOfPages();
+          evidencePageMap[pg]={fileIndex:fi+1,fileName:evFile.name,fileTotal:pdfEvidenceFiles.length};
+          doc.setFillColor(26,35,50); doc.rect(0,0,W,18,"F");
+          doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(255,255,255);
+          doc.text(`EVIDENCE OF CLOSURE — File ${fi+1} of ${pdfEvidenceFiles.length}`,margin,8);
+          doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(200,210,220);
+          doc.text(evFile.name,W-margin,8,{align:"right"});
+          doc.setFontSize(7); doc.setTextColor(160,180,200);
+          doc.text(`CAR: ${car.id}  |  Evidence of Closure`,margin,14);
+          doc.setFillColor(245,248,252); doc.rect(margin,24,col,36,"F");
+          doc.setDrawColor(221,227,234); doc.rect(margin,24,col,36,"S");
+          doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+          doc.text("Attached File: "+evFile.name,margin+4,36);
+          if(!isInline){doc.setTextColor(1,87,155);doc.textWithLink("Click to open / download",margin+4,48,{url:evFile.url});}
+          else{doc.setFont("helvetica","italic");doc.setFontSize(8);doc.setTextColor(95,114,133);doc.text("(Stored inline — download from AeroQualify Pro)",margin+4,48);}
+        }
+      } catch(evErr){ console.warn("Evidence page failed for",evFile.name,evErr); }
+    }
+
+    // ── Footer on every page — evidence pages get special labelling ──
+    const totalPagesBeforeMerge=doc.getNumberOfPages();
+    for(let p=1;p<=totalPagesBeforeMerge;p++){
+      doc.setPage(p);
+      const isEvPage=p>reportPageCount;
+      const evInfo=evidencePageMap[p];
+      // Footer bar
+      doc.setFillColor(isEvPage?26:245, isEvPage?35:248, isEvPage?50:252);
+      doc.rect(0,287,W,10,"F");
+      doc.setDrawColor(isEvPage?60:221, isEvPage?80:227, isEvPage?100:234);
+      doc.setLineWidth(0.3); doc.line(0,287,W,287);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7);
+      doc.setTextColor(isEvPage?200:95, isEvPage?210:114, isEvPage?220:133);
+      if(isEvPage&&evInfo){
+        // Evidence page footer -- clearly labelled
+        doc.setFont("helvetica","bold");
+        doc.text(`EVIDENCE OF CLOSURE  |  File ${evInfo.fileIndex} of ${evInfo.fileTotal}  |  ${evInfo.fileName}`,margin,293);
+        doc.setFont("helvetica","normal");
+      } else {
+        doc.text("Pegasus Flyers (E.A.) Ltd.  |  Confidential QMS Document  |  AS9100D / ISO 9001:2015",margin,293);
+      }
+      doc.text("Page "+p+" of "+totalPagesBeforeMerge,W-margin,293,{align:"right"});
+    }
+
+    // ── Merge queued PDF evidence files via pdf-lib ──
+    if(window._pdfMergeQueue?.length>0){
+      try{
+        const{PDFDocument}=await import("pdf-lib");
+        const{rgb,StandardFonts}=await import("pdf-lib");
+        const mainBytes=doc.output("arraybuffer");
+        const mainPdf=await PDFDocument.load(mainBytes);
+        const boldFont=await mainPdf.embedFont(StandardFonts.HelveticaBold);
+        const normFont=await mainPdf.embedFont(StandardFonts.Helvetica);
+        const dark=rgb(0.1,0.14,0.2);
+        const white=rgb(1,1,1);
+        const light=rgb(0.78,0.82,0.86);
+        const muted=rgb(0.63,0.71,0.78);
+
+        // ── Pass 1: add all pages to mainPdf, track page ranges ──
+        // Structure: [{pageIndex, fileIndex, fileTotal, fileName, carId, evPageNum, evPageTotal}]
+        const evidencePageMeta=[];
+
+        for(const q of window._pdfMergeQueue){
+          // Divider page
+          mainPdf.addPage([595,842]);
+          evidencePageMeta.push({pageIndex:mainPdf.getPageCount()-1,isDivider:true,
+            fileIndex:q.index,fileTotal:q.total,fileName:q.name,carId:q.carId});
+
+          // Evidence pages
+          const evPdf=await PDFDocument.load(q.bytes);
+          const evPageCount=evPdf.getPageCount();
+          const copied=await mainPdf.copyPages(evPdf,Array.from({length:evPageCount},(_,i)=>i));
+          copied.forEach((pg,pi)=>{
+            mainPdf.addPage(pg);
+            evidencePageMeta.push({pageIndex:mainPdf.getPageCount()-1,isDivider:false,
+              fileIndex:q.index,fileTotal:q.total,fileName:q.name,carId:q.carId,
+              evPageNum:pi+1,evPageTotal:evPageCount});
+          });
+        }
+        window._pdfMergeQueue=[];
+
+        // ── Pass 2: now we know total page count -- stamp every evidence page ──
+        const totalPages=mainPdf.getPageCount();
+        const pages=mainPdf.getPages();
+
+        evidencePageMeta.forEach(meta=>{
+          const pg=pages[meta.pageIndex];
+          const {width,height}=pg.getSize();
+          const docPageNum=meta.pageIndex+1; // 1-based
+
+          if(meta.isDivider){
+            // Full dark divider page
+            pg.drawRectangle({x:0,y:0,width,height,color:rgb(0.08,0.11,0.17)});
+            // Centre label
+            pg.drawRectangle({x:40,y:height/2-30,width:width-80,height:60,color:dark,borderRadius:4});
+            pg.drawText("EVIDENCE OF CLOSURE",{x:width/2-100,y:height/2+12,size:16,font:boldFont,color:white});
+            pg.drawText(`File ${meta.fileIndex} of ${meta.fileTotal}  —  ${meta.fileName}`,
+              {x:width/2-100,y:height/2-4,size:9,font:normFont,color:light,maxWidth:width-80});
+            pg.drawText(`CAR: ${meta.carId}`,{x:width/2-100,y:height/2-18,size:8,font:normFont,color:muted});
+            // Footer
+            pg.drawRectangle({x:0,y:0,width,height:18,color:dark});
+            pg.drawText(`EVIDENCE OF CLOSURE  |  File ${meta.fileIndex} of ${meta.fileTotal}  |  ${meta.fileName}`,
+              {x:14,y:6,size:6,font:boldFont,color:light,maxWidth:width-80});
+            pg.drawText(`Page ${docPageNum} of ${totalPages}`,{x:width-60,y:6,size:6,font:normFont,color:light});
+          } else {
+            // Evidence content page -- stamp header + footer over existing content
+            // Header bar
+            pg.drawRectangle({x:0,y:height-16,width,height:16,color:dark});
+            pg.drawText(`EVIDENCE OF CLOSURE  —  File ${meta.fileIndex} of ${meta.fileTotal}`,
+              {x:8,y:height-10,size:8,font:boldFont,color:white});
+            // Filename right-aligned (truncate if long)
+            const fname=meta.fileName.length>40?meta.fileName.slice(0,37)+"…":meta.fileName;
+            pg.drawText(fname,{x:width-8-fname.length*4.2,y:height-10,size:7,font:normFont,color:light});
+            pg.drawText(`CAR: ${meta.carId}  |  Evidence page ${meta.evPageNum} of ${meta.evPageTotal}`,
+              {x:8,y:height-15,size:5.5,font:normFont,color:muted});
+            // Footer bar
+            pg.drawRectangle({x:0,y:0,width,height:14,color:dark});
+            pg.drawText(`EVIDENCE OF CLOSURE  |  File ${meta.fileIndex} of ${meta.fileTotal}  |  ${meta.fileName}`,
+              {x:8,y:5,size:6,font:boldFont,color:light,maxWidth:width-80});
+            pg.drawText(`Page ${docPageNum} of ${totalPages}`,{x:width-60,y:5,size:6,font:normFont,color:light});
+          }
+        });
+
+        const merged=await mainPdf.save();
+        const url=URL.createObjectURL(new Blob([merged],{type:"application/pdf"}));
+        const a=document.createElement("a"); a.href=url; a.download=`CAPA-Report-${car.id}.pdf`;
+        a.click(); URL.revokeObjectURL(url);
+        showToast("PDF report with all evidence generated","success");
+        return;
+      } catch(mergeErr){
+        console.warn("PDF merge failed:",mergeErr);
+        window._pdfMergeQueue=[];
+        // Fall through to doc.save() below
+      }
+    }
+
+    doc.save(`CAPA-Report-${car.id}.pdf`);
+    showToast("PDF report generated","success");
+  };
+
+  const generateStatusReport = async() => {
+    const{jsPDF}=await import("jspdf");
+    const{default:autoTable}=await import("jspdf-autotable");
+    const doc=new jsPDF("landscape");
+
+    doc.setDrawColor(1,87,155); doc.setLineWidth(0.8); doc.line(14,30,270,30);
+    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(1,87,155);
+    doc.text("CAPA STATUS REPORT",14,38);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text("Pegasus Flyers (E.A.) Ltd. · "+`Generated: ${new Date().toLocaleDateString("en-GB")}  |  Total CARs: ${data.cars.length}`,14,44);
+    doc.setTextColor(0,0,0);
+    autoTable(doc,{startY:50,head:[["CAR #","Severity","Status","Department","Raised","Due","Resp. Manager"]],
+      body:data.cars.map(c=>[c.id,c.severity,c.status,c.department||"—",fmt(c.date_raised),fmt(c.due_date),c.responsible_manager||"--"]),
+      styles:{fontSize:9},headStyles:{fillColor:[1,87,155]},
+      alternateRowStyles:{fillColor:[245,248,252]},
+    });
+    doc.save(`CAPA-Status-Report-${new Date().toISOString().slice(0,10)}.pdf`);
+    showToast("Status report generated","success");
+  };
+
+  return (
+    <div>
+      <SectionHeader
+        title="Corrective Action Requests"
+        subtitle="CARs raised by Quality Manager or Quality Auditor"
+        action={
+          <div style={{ display:"flex", gap:10 }}>
+            <Btn variant="outline" size="sm" onClick={generateStatusReport}>📊 Status Report</Btn>
+            {canRaiseCAR&&<Btn size="sm" onClick={()=>{setSelected(null);setModal("car")}}>+ Raise CAR</Btn>}
+          </div>
+        }
+      />
+      {/* Filters */}
+      <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+        {["all","Open","In Progress","Pending Verification","Returned for Resubmission","Closed","Overdue"].map(f=>(
+          <button key={f} onClick={()=>setFilter(f)}
+            style={{ padding:"5px 14px", borderRadius:20, border:`1px solid ${filter===f?T.primary:T.border}`, background:filter===f?T.primary:"#fff", color:filter===f?"#fff":T.muted, fontSize:12, fontWeight:filter===f?600:400, cursor:"pointer" }}>
+            {f==="all"?"All":f}
+          </button>
+        ))}
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search CARs…"
+          style={{ marginLeft:"auto", background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"6px 14px", fontSize:12, width:220, color:T.text }} />
+      </div>
+
+      {/* Table */}
+      <div className="card" style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:"#f5f8fc" }}>
+              {["CAR #","Finding","Clause","Severity","Status","Dept","Due Date","Resp. Manager","Actions"].map(h=>(
+                <th key={h} style={{ padding:"10px 14px", textAlign:"left", color:T.muted, fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase", borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length===0
+              ? <tr><td colSpan={9} style={{ padding:32, textAlign:"center", color:T.muted }}>No CARs found</td></tr>
+              : filtered.map(c=>{
+                const od=isOverdue(c.due_date)&&!["Closed","Completed"].includes(c.status); const cap=getCAP(c.id); const verif=getVerif(c.id);
+                return (
+                  <tr key={c.id} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od&&c.status!=="Closed"?"#fff8f8":"" }}>
+                    <td style={{ padding:"10px 14px", fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{c.id}</td>
+                    <td style={{ padding:"10px 14px", maxWidth:220 }}>
+                      <div className="tooltip-wrap">
+                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.text, maxWidth:210 }}>{c.finding_description}</div>
+                        <div className="tooltip-box"><strong style={{color:"#90caf9"}}>Finding:</strong><br/>{c.finding_description}</div>
+                      </div>
+                    </td>
+                    <td style={{ padding:"10px 14px", maxWidth:160 }}>
+                      <div className="tooltip-wrap">
+                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'Source Code Pro',monospace", fontSize:11, color:T.muted, maxWidth:150 }}>{c.qms_clause||"—"}</div>
+                        {c.qms_clause&&<div className="tooltip-box"><strong style={{color:"#90caf9"}}>QMS Clause:</strong><br/>{c.qms_clause}</div>}
+                      </div>
+                    </td>
+                    <td style={{ padding:"10px 14px" }}><Badge label={c.severity}/></td>
+                    <td style={{ padding:"10px 14px" }}><Badge label={c.status}/></td>
+                    <td style={{ padding:"10px 14px", color:T.muted, fontSize:12 }}>{c.department||"--"}</td>
+                    <td style={{ padding:"10px 14px", color:od?T.red:T.text, fontSize:12, fontWeight:od?600:400 }}>{fmt(c.due_date)}{od?` ⚠`:""}</td>
+                    <td style={{ padding:"10px 14px", color:T.muted, fontSize:12 }}>{c.responsible_manager||"--"}</td>
+                    <td style={{ padding:"10px 14px" }}>
+                      <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                        {canRaiseCAR&&<Btn size="sm" variant="ghost" onClick={()=>{setSelected(c);setModal("car")}}>Edit</Btn>}
+                        <Btn size="sm" variant="outline" onClick={()=>{setSelected(c);setModal("detail")}} style={{color:T.teal,borderColor:T.teal}}>View</Btn>
+                        {c.status!=="Closed"&&<Btn size="sm" variant="outline" onClick={()=>{setSelected(c);setModal("cap")}}>CAP</Btn>}
+                        {c.status==="Pending Verification"&&["admin","quality_manager"].includes(profile?.role)&&
+                          <Btn size="sm" variant="success" onClick={()=>{setSelected(c);setModal("verify")}}>Verify</Btn>}
+                        {(cap||verif)&&<Btn size="sm" variant="ghost" onClick={()=>generateReport(c)}>📄 PDF</Btn>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+
+      {modal==="car"&&<CARModal car={selected} managers={managers} onSave={saveCar} onClose={()=>setModal(null)} />}
+      {modal==="cap"&&selected&&<CAPModal car={selected} cap={getCAP(selected.id)} onSave={saveCap} onClose={()=>setModal(null)} />}
+      {modal==="verify"&&selected&&<VerificationModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} onSave={saveVerification} onClose={()=>setModal(null)} />}
+      {modal==="detail"&&selected&&<CAPADetailModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} allCaps={getAllCAPs(selected.id)} allVerifs={getAllVerifs(selected.id)} onPDF={()=>generateReport(selected)} onClose={()=>setModal(null)} />}
+    </div>
+  );
+};
+
+// ─── Generic Table Page ───────────────────────────────────────
+const GenericPage = ({ title, subtitle, table, columns, modalFields, modalTitle, modalDefaults, data, canEdit, canDelete, user, profile, onRefresh, showToast, extraActions }) => {
+  const [modal,  setModal]  = useState(false);
+  const [editing,setEditing]= useState(null);
+  const [search, setSearch] = useState("");
+  const rows = (data[table]||[]).filter(r=>!search||JSON.stringify(r).toLowerCase().includes(search.toLowerCase()));
+
+  const save = async(form) => {
+    const isNew = !data[table]?.find(r=>r.id===form.id);
+    const payload={...form,updated_at:new Date().toISOString()};
+    if(isNew){
+      payload.created_by=user.id; payload.updated_by=user.id;
+      const{error}=await supabase.from(table).insert(payload);
+      if(error){showToast(`Error: ${error.message}`,"error");return;}
+      await logChange({user,action:"created",table,recordId:form.id,recordTitle:form.title||form.name||form.id,newData:form});
+      showToast("Record created","success");
+    } else {
+      payload.updated_by=user.id;
+      const{error}=await supabase.from(table).update(payload).eq("id",form.id);
+      if(error){showToast(`Error: ${error.message}`,"error");return;}
+      await logChange({user,action:"updated",table,recordId:form.id,recordTitle:form.title||form.name||form.id,newData:form});
+      showToast("Record updated","success");
+    }
+    setModal(false); setEditing(null); onRefresh();
+  };
+
+  const del = async(row) => {
+    if(!window.confirm(`Delete ${row.id}?`)) return;
+    const{error}=await supabase.from(table).delete().eq("id",row.id);
+    if(error){showToast(`Error: ${error.message}`,"error");return;}
+    await logChange({user,action:"deleted",table,recordId:row.id,recordTitle:row.title||row.name||row.id,oldData:row});
+    showToast("Record deleted","info"); onRefresh();
+  };
+
+  return (
+    <div>
+      <SectionHeader title={title} subtitle={subtitle}
+        action={
+          <div style={{ display:"flex", gap:10 }}>
+            {extraActions}
+            {canEdit&&<Btn size="sm" onClick={()=>{setEditing(null);setModal(true)}}>+ Add New</Btn>}
+          </div>
+        }
+      />
+      <div style={{ marginBottom:14 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`}
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 14px", fontSize:12, width:280, color:T.text }} />
+      </div>
+      <div className="card" style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:"#f5f8fc" }}>
+              {columns.map(c=><th key={c.key} style={{ padding:"10px 14px", textAlign:"left", color:T.muted, fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase", borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{c.label}</th>)}
+              {(canEdit||canDelete)&&<th style={{ padding:"10px 14px", borderBottom:`1px solid ${T.border}`, width:100 }} />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length===0
+              ? <tr><td colSpan={columns.length+1} style={{ padding:32, textAlign:"center", color:T.muted }}>No records found</td></tr>
+              : rows.map((row,i)=>{
+                const due=row.due_date||row.expiry_date||row.next_audit||row.date;
+                const DONE=["Closed","Approved","Completed","Cancelled","Expired"]; const od=isOverdue(due)&&!DONE.includes(row.status);
+                return (
+                  <tr key={row.id||i} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od?"#fff8f8":"" }}>
+                    {columns.map(c=>(
+                      <td key={c.key} style={{ padding:"10px 14px", color:T.text, verticalAlign:"middle" }}>
+                        {c.badge ? <Badge label={row[c.key]} /> :
+                         c.mono  ? <span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{row[c.key]}</span> :
+                         c.due   ? <span style={{ color:od?T.red:(isApproaching(due)&&!DONE.includes(row.status))?T.yellow:T.text, fontWeight:od||(isApproaching(due)&&!DONE.includes(row.status))?600:400 }}>{fmt(row[c.key])}{od?" ⚠":""}</span> :
+                         <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:c.wrap?"normal":"nowrap", maxWidth:240 }}>{row[c.key]||"--"}</span>}
+                      </td>
+                    ))}
+                    {(canEdit||canDelete)&&(
+                      <td style={{ padding:"10px 14px" }}>
+                        <div style={{ display:"flex", gap:5 }}>
+                          {canEdit&&<Btn size="sm" variant="ghost" onClick={()=>{setEditing(row);setModal(true)}}>Edit</Btn>}
+                          {canDelete&&<Btn size="sm" variant="danger" onClick={()=>del(row)} style={{ padding:"4px 10px", fontSize:11 }}>✕</Btn>}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+      {modal&&(
+        <GenericModal title={(editing?"Edit ":"New ")+modalTitle} fields={modalFields} defaults={editing||modalDefaults||{}} onSave={save} onClose={()=>{setModal(false);setEditing(null);}} />
+      )}
+    </div>
+  );
+};
+
+// ─── Generic Modal ────────────────────────────────────────────
+const GenericModal = ({ title, fields, defaults, onSave, onClose }) => {
+  const [form, setForm] = useState(defaults||{});
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  return (
+    <ModalShell title={title} onClose={onClose} wide>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+        {fields.map(f=>(
+          <div key={f.key} style={{ gridColumn:f.full?"1/-1":"auto" }}>
+            {f.type==="select"
+              ? <Select label={f.label} value={form[f.key]||""} onChange={e=>set(f.key,e.target.value)}><option value="">Select…</option>{f.options.map(o=><option key={o}>{o}</option>)}</Select>
+              : f.type==="textarea"
+              ? <Textarea label={f.label} value={form[f.key]||""} onChange={e=>set(f.key,e.target.value)} />
+              : <Input label={f.label} type={f.type||"text"} value={form[f.key]||""} onChange={e=>set(f.key,e.target.value)} />
+            }
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn onClick={()=>{onSave(form);onClose();}}>Save</Btn>
+      </div>
+    </ModalShell>
+  );
+};
+
+// ─── Managers Settings Page ───────────────────────────────────
+const ManagersPage = ({ managers, onRefresh, showToast, isAdmin }) => {
+  const [editing, setEditing] = useState(null);
+  const save = async(mgr) => {
+    const{error}=await supabase.from(TABLES.managers).update({person_name:mgr.person_name,email:mgr.email,updated_at:new Date().toISOString()}).eq("id",mgr.id);
+    if(error){showToast(`Error: ${error.message}`,"error");return;}
+    showToast("Manager updated","success"); setEditing(null); onRefresh();
+  };
+  return (
+    <div>
+      <SectionHeader title="Responsible Managers" subtitle="Assign names and email addresses to each role" />
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
+        {managers.map(m=>(
+          <Card key={m.id}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+              <div>
+                <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:700, fontSize:14, color:T.primaryDk }}>{m.role_title}</div>
+                <div style={{ fontSize:12, color:T.muted, marginTop:2 }}>{m.department}</div>
+              </div>
+              {isAdmin&&<Btn size="sm" variant="ghost" onClick={()=>setEditing({...m})}>Edit</Btn>}
+            </div>
+            <div style={{ marginTop:12, borderTop:`1px solid ${T.border}`, paddingTop:12 }}>
+              <div style={{ fontSize:13, color:m.person_name?T.text:T.muted }}>{m.person_name||"— Name not set —"}</div>
+              <div style={{ fontSize:12, color:T.muted, marginTop:3 }}>{m.email||"— Email not set --"}</div>
+            </div>
+          </Card>
+        ))}
+      </div>
+      {editing&&(
+        <ModalShell title={`Edit: ${editing.role_title}`} onClose={()=>setEditing(null)}>
+          <Input label="Person's Name" value={editing.person_name||""} onChange={e=>setEditing(p=>({...p,person_name:e.target.value}))} placeholder="e.g. John Smith" />
+          <Input label="Email Address" type="email" value={editing.email||""} onChange={e=>setEditing(p=>({...p,email:e.target.value}))} placeholder="manager@company.com" />
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <Btn variant="ghost" onClick={()=>setEditing(null)}>Cancel</Btn>
+            <Btn onClick={()=>save(editing)}>Save</Btn>
+          </div>
+        </ModalShell>
+      )}
+    </div>
+  );
+};
+
+// ─── About View ───────────────────────────────────────────────
+const AboutView = () => {
+  const year = new Date().getFullYear();
+
+  const COMPLIANCE_DATA = [
+    { std:"AS9100D / ISO 9001:2015", color:"#01579b", bg:"#e3f2fd", items:[
+      { clause:"10.2.1", text:"Nonconformity & corrective action — full CAR/CAP workflow", ok:true },
+      { clause:"10.2.2", text:"Evidence of corrective action effectiveness", ok:true },
+      { clause:"10.2.3", text:"Review of corrective actions and trends", ok:true },
+      { clause:"7.5",    text:"Control of documented information", ok:true },
+      { clause:"7.5.3",  text:"Audit trail — full change log", ok:true },
+      { clause:"8.4",    text:"Control of externally provided processes — contractor register", ok:true },
+      { clause:"9.2",    text:"Internal audit programme", ok:true },
+      { clause:"6.1",    text:"Actions to address risks and opportunities — Risk Register", ok:true },
+      { clause:"9.3",    text:"Management review inputs (dashboard)", ok:"partial" },
+      { clause:"4.1",    text:"Context of the organisation", ok:"partial" },
+      { clause:"6.2",    text:"Quality objectives register", ok:false },
+      { clause:"7.1.5",  text:"Calibration and measurement resources register", ok:false },
+    ]},
+    { std:"KCAA ATO Regulatory Requirements", color:"#2e7d32", bg:"#e8f5e9", items:[
+      { clause:"CAP Tracking",  text:"System for tracking internal and KCAA-issued CAPs", ok:true },
+      { clause:"Doc Control",   text:"Quality Manual and associated document control", ok:true },
+      { clause:"Cert Tracking", text:"ATO certificate, approvals and regulatory document expiry", ok:true },
+      { clause:"Contractors",   text:"Approved maintenance and service provider register", ok:true },
+      { clause:"Audit Trail",   text:"Record of all quality-related actions and decisions", ok:true },
+      { clause:"QM Amendment",  text:"System referenced in Quality Manual — amendment pending", ok:"partial" },
+      { clause:"Training Rec.", text:"Instructor and student training records", ok:"planned" },
+      { clause:"Occurrence",    text:"Mandatory occurrence reporting system", ok:"planned" },
+      { clause:"Maintenance",   text:"Aircraft maintenance tracking and tech log", ok:"planned" },
+    ]},
+    { std:"ICAO Annex 19 — SMS Framework", color:"#e65100", bg:"#fff3e0", items:[
+      { clause:"2.1", text:"Hazard identification — 7-category risk register", ok:true },
+      { clause:"2.2", text:"Safety risk assessment — ICAO 5x5 matrix", ok:true },
+      { clause:"2.3", text:"Safety risk mitigation and treatment tracking", ok:true },
+      { clause:"3.1", text:"Safety performance monitoring -- QMS compliance score", ok:true },
+      { clause:"1.1", text:"Safety management commitment and responsibility", ok:"partial" },
+      { clause:"1.4", text:"Safety Performance Indicators (SPIs) and targets", ok:false },
+      { clause:"3.2", text:"Management of change workflow", ok:false },
+      { clause:"4.1", text:"Training and education records", ok:"planned" },
+      { clause:"4.2", text:"Safety communication and promotion log", ok:false },
+    ]},
+  ];
+
+  const si = (ok) => ok===true?{icon:"✓",bg:"#e8f5e9",color:"#2e7d32"}:ok==="partial"?{icon:"~",bg:"#fff8e1",color:"#f57f17"}:ok==="planned"?{icon:"~",bg:"#e8eaf6",color:"#3949ab"}:{icon:"x",bg:"#ffebee",color:"#c62828"};
+  const st = (ok) => ok===true?{label:"Compliant",bg:"#e8f5e9",color:"#2e7d32"}:ok==="partial"?{label:"Partial",bg:"#fff8e1",color:"#f57f17"}:ok==="planned"?{label:"Planned",bg:"#e8eaf6",color:"#3949ab"}:{label:"Gap",bg:"#ffebee",color:"#c62828"};
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:24, maxWidth:900 }}>
+
+      {/* Hero */}
+      <div className="card" style={{ background:`linear-gradient(135deg,${T.navy} 0%,#0d3060 100%)`, padding:"32px 36px", borderRadius:12, color:"#fff", position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute",top:-40,right:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,0.03)" }}/>
+        <div style={{ position:"absolute",bottom:-60,right:60,width:300,height:300,borderRadius:"50%",background:"rgba(255,255,255,0.02)" }}/>
+        <div style={{ position:"relative", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:20, flexWrap:"wrap" }}>
+          <div>
+            <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:32, fontWeight:800, letterSpacing:0.5, lineHeight:1 }}>
+              AeroQualify <span style={{ color:T.sky }}>Pro</span>
+            </div>
+            <div style={{ fontSize:13, color:"rgba(255,255,255,0.6)", marginTop:6, fontWeight:300 }}>Aviation Quality Management System</div>
+            <div style={{ display:"flex", gap:8, marginTop:14, flexWrap:"wrap" }}>
+              {["AS9100D","ISO 9001:2015","ICAO Annex 19","KCAA ATO"].map(b=>(
+                <span key={b} style={{ fontSize:10, fontWeight:700, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:4, padding:"3px 9px", letterSpacing:0.5 }}>{b}</span>
+              ))}
+            </div>
+          </div>
+          <div style={{ textAlign:"right", flexShrink:0 }}>
+            <div style={{ fontFamily:"'Source Code Pro',monospace", fontSize:11, color:"rgba(255,255,255,0.4)", marginBottom:4 }}>VERSION</div>
+            <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:28, fontWeight:800, color:T.sky }}>3.0</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{year}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Legal Ownership */}
+      <div className="card" style={{ padding:"24px 28px", borderLeft:`4px solid ${T.primary}` }}>
+        <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:14, fontWeight:700, color:T.primaryDk, marginBottom:16 }}>Legal Ownership &amp; Copyright</div>
+        <div style={{ background:T.primaryLt, borderRadius:8, padding:"16px 18px", marginBottom:16, border:`1px solid ${T.border}` }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.primaryDk, marginBottom:8 }}>Copyright Notice</div>
+          <div style={{ fontSize:13, color:T.text, lineHeight:1.8 }}>
+            Copyright &copy; {year} Kornelius Magita. All rights reserved.
+          </div>
+          <div style={{ fontSize:12, color:T.muted, marginTop:10, lineHeight:1.8 }}>
+            AeroQualify Pro and all associated software, source code, design, documentation, workflows, and data structures — including all current and future versions and editions — are the exclusive intellectual property of Kornelius Magita No part of this software may be reproduced, distributed, modified, sublicensed, sold, or transferred to any third party without the express written consent of Kornelius Magita.
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          {[
+            { label:"Software Owner",   value:"Kornelius Magita" },
+            { label:"Rights",           value:"All rights reserved — full copyright" },
+            { label:"Jurisdiction",     value:"Republic of Kenya" },
+            { label:"Licence Type",     value:"Proprietary -- not open source" },
+            { label:"Covers",           value:"This and all future editions" },
+            { label:"Unauthorised Use", value:"Strictly prohibited" },
+          ].map(r=>(
+            <div key={r.label} style={{ background:"#f8fafc", borderRadius:6, padding:"10px 14px", border:`1px solid ${T.border}` }}>
+              <div style={{ fontSize:10, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:3 }}>{r.label}</div>
+              <div style={{ fontSize:13, color:T.text, fontWeight:600 }}>{r.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* System Info */}
+      <div className="card" style={{ padding:"24px 28px" }}>
+        <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:14, fontWeight:700, color:T.primaryDk, marginBottom:16 }}>System Information</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+          {[
+            { label:"Platform",   value:"Web / Cloud (Vercel)" },
+            { label:"Database",   value:"Supabase (PostgreSQL)" },
+            { label:"Version",    value:"3.0.0" },
+            { label:"Framework",  value:"React 18" },
+            { label:"Auth",       value:"Supabase Auth (JWT)" },
+            { label:"Backup",     value:"Daily -- Google Drive" },
+          ].map(r=>(
+            <div key={r.label} style={{ background:"#f8fafc", borderRadius:6, padding:"10px 14px", border:`1px solid ${T.border}` }}>
+              <div style={{ fontSize:10, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:3 }}>{r.label}</div>
+              <div style={{ fontFamily:"'Source Code Pro',monospace", fontSize:12, color:T.primary, fontWeight:600 }}>{r.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Compliance Checklist */}
+      <div className="card" style={{ padding:"24px 28px" }}>
+        <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:14, fontWeight:700, color:T.primaryDk, marginBottom:6 }}>Standards Compliance Checklist</div>
+        <div style={{ fontSize:12, color:T.muted, marginBottom:16 }}>
+          AeroQualify Pro is designed to support compliance with the standards below. This checklist reflects the current state of the system and is updated as new modules are developed.
+        </div>
+        {/* Legend */}
+        <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:20, padding:"10px 14px", background:"#f8fafc", borderRadius:8, border:`1px solid ${T.border}` }}>
+          {[{l:"Compliant",c:"#2e7d32"},{l:"Partial",c:"#f57f17"},{l:"Planned",c:"#3949ab"},{l:"Gap",c:"#c62828"}].map(x=>(
+            <div key={x.l} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11 }}>
+              <div style={{ width:10,height:10,borderRadius:"50%",background:x.c }}/>
+              <span style={{ color:T.muted }}>{x.l}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+          {COMPLIANCE_DATA.map(std=>(
+            <div key={std.std} style={{ border:`1px solid ${T.border}`, borderRadius:10, overflow:"hidden" }}>
+              <div style={{ background:std.bg, padding:"12px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:`1px solid ${T.border}`, flexWrap:"wrap", gap:8 }}>
+                <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:13, fontWeight:700, color:std.color }}>{std.std}</div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {[{ok:true,label:"compliant"},{ok:"partial",label:"partial"},{ok:false,label:"gaps"},{ok:"planned",label:"planned"}].map(b=>{
+                    const cnt=std.items.filter(i=>i.ok===b.ok).length;
+                    if(!cnt) return null;
+                    const s=st(b.ok);
+                    return <span key={b.label} style={{ fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:s.bg,color:s.color }}>{cnt} {b.label}</span>;
+                  })}
+                </div>
+              </div>
+              {std.items.map((item,idx)=>{
+                const s=si(item.ok); const tag=st(item.ok);
+                return (
+                  <div key={item.clause} style={{ display:"grid", gridTemplateColumns:"28px 100px 1fr 90px", alignItems:"center", gap:12, padding:"10px 18px", borderBottom:idx<std.items.length-1?`1px solid #f0f3f7`:"none" }}>
+                    <div style={{ width:22,height:22,borderRadius:"50%",background:s.bg,color:s.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0 }}>{s.icon}</div>
+                    <span style={{ fontFamily:"'Source Code Pro',monospace",fontSize:10,fontWeight:600,color:T.primary,background:"#e3f2fd",padding:"3px 8px",borderRadius:4,whiteSpace:"nowrap" }}>{item.clause}</span>
+                    <span style={{ fontSize:12,color:T.text }}>{item.text}</span>
+                    <span style={{ fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:10,textAlign:"center",background:tag.bg,color:tag.color,whiteSpace:"nowrap" }}>{tag.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ textAlign:"center", fontSize:11, color:T.muted, paddingBottom:8 }}>
+        AeroQualify Pro &nbsp;&middot;&nbsp; Copyright &copy; {year} Kornelius Magita. All rights reserved. &nbsp;&middot;&nbsp; v3.0.0
+      </div>
+    </div>
+  );
+};
+
+// ─── Change Log View ──────────────────────────────────────────
+const ChangeLogView = ({ logs }) => (
+  <div>
+    <SectionHeader title="Change Log" subtitle="Full audit trail of all system changes" />
+    <Card>
+      <div style={{ overflowY:"auto", maxHeight:"calc(100vh - 240px)" }}>
+        {logs.length===0
+          ? <div style={{ textAlign:"center", color:T.muted, padding:32 }}>No changes recorded yet</div>
+          : logs.map((log,i)=>(
+            <div key={i} style={{ display:"flex", gap:12, padding:"10px 0", borderBottom:`1px solid ${T.border}`, alignItems:"flex-start" }}>
+              <div style={{ width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${T.primary},${T.sky})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0 }}>
+                {(log.user_name||"?")[0].toUpperCase()}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, color:T.text }}>
+                  <span style={{ color:T.primary, fontWeight:600 }}>{log.user_name}</span>
+                  {" "}<span style={{ color:log.action?.includes("delet")?T.red:log.action?.includes("creat")?T.green:T.yellow, fontWeight:500 }}>{log.action}</span>
+                  {" "}<span style={{ fontFamily:"'Source Code Pro',monospace", color:T.muted, fontSize:11 }}>{log.table_name}/{log.record_id}</span>
+                </div>
+                {log.record_title&&<div style={{ fontSize:12, color:T.muted, marginTop:1 }}>{log.record_title}</div>}
+                <div style={{ fontSize:11, color:T.light, marginTop:1 }}>{new Date(log.created_at).toLocaleString()}</div>
+              </div>
+            </div>
+          ))}
+      </div>
+    </Card>
+  </div>
+);
+
+// ─── Column configs ───────────────────────────────────────────
+const DOC_COLS = [
+  {key:"id",label:"ID",mono:true},{key:"title",label:"Title",wrap:true},{key:"rev",label:"Rev"},{key:"doc_section",label:"Section"},
+  {key:"category",label:"Category"},{key:"status",label:"Status",badge:true},{key:"owner",label:"Owner"},
+  {key:"date",label:"Date"},{key:"expiry_date",label:"Expiry",due:true},{key:"approved_by",label:"Approved By"},
+];
+const FLIGHT_DOC_COLS = [
+  {key:"id",label:"ID",mono:true},{key:"title",label:"Title",wrap:true},{key:"doc_type",label:"Type",badge:true},
+  {key:"issuing_body",label:"Issuing Body"},{key:"issue_date",label:"Issue Date"},{key:"expiry_date",label:"Expiry",due:true},{key:"status",label:"Status",badge:true},
+];
+const AUDIT_COLS = [
+  {key:"id",label:"ID",mono:true},{key:"title",label:"Title",wrap:true},{key:"type",label:"Type",badge:true},
+  {key:"status",label:"Status",badge:true},{key:"lead",label:"Lead"},{key:"scope",label:"Scope"},
+  {key:"date",label:"Date",due:true},{key:"findings",label:"Findings"},{key:"obs",label:"Obs."},
+];
+const CONTRACTOR_COLS = [
+  {key:"id",label:"ID",mono:true},{key:"name",label:"Contractor"},{key:"category",label:"Category"},
+  {key:"status",label:"Status",badge:true},{key:"rating",label:"Rating",badge:true},
+  {key:"contact",label:"Contact"},{key:"country",label:"Country"},
+  {key:"last_audit",label:"Last Audit"},{key:"next_audit",label:"Next Audit",due:true},
+];
+
+const DOC_FIELDS = [
+  {key:"id",label:"Document ID"},{key:"title",label:"Title",full:true},
+  {key:"rev",label:"Revision"},{key:"status",label:"Status",type:"select",options:["Draft","In Review","Approved","Obsolete"]},
+  {key:"doc_section",label:"Section",type:"select",options:["Operations Manual","Training Manual","Safety Manual","Maintenance Manual","Quality Manual","SOPs","Checklists","Forms","Policies","Other"]},
+  {key:"category",label:"Category",type:"select",options:["Core QMS","Engineering","Procurement","Equipment","Audit","Risk","HR","Production","Training","Safety","Maintenance"]},
+  {key:"owner",label:"Owner"},{key:"date",label:"Date",type:"date"},{key:"expiry_date",label:"Expiry Date",type:"date"},{key:"approved_by",label:"Approved By"},
+];
+const FLIGHT_DOC_FIELDS = [
+  {key:"id",label:"Document ID"},{key:"title",label:"Title",full:true},
+  {key:"doc_type",label:"Type",type:"select",options:["Air Operator Certificate","Approved Training Organisation","Aircraft Registration","Certificate of Airworthiness","Radio License","Insurance Certificate","Aerodrome Approval","Air Traffic Service Agreement","Dangerous Goods Approval","Other Approval","Other Certificate"]},
+  {key:"issuing_body",label:"Issuing Authority"},{key:"issue_date",label:"Issue Date",type:"date"},
+  {key:"expiry_date",label:"Expiry Date",type:"date"},
+  {key:"status",label:"Status",type:"select",options:["Valid","Expired","Pending Renewal","Suspended"]},
+  {key:"notes",label:"Notes",full:true,type:"textarea"},
+];
+const AUDIT_FIELDS = [
+  {key:"id",label:"Audit ID"},{key:"title",label:"Title",full:true},
+  {key:"type",label:"Type",type:"select",options:["Internal","Supplier","External","Regulatory","Surveillance"]},
+  {key:"status",label:"Status",type:"select",options:["Scheduled","In Progress","Completed"]},
+  {key:"lead",label:"Lead Auditor"},{key:"scope",label:"Scope"},{key:"date",label:"Date",type:"date"},
+  {key:"findings",label:"Findings #",type:"number"},{key:"obs",label:"Observations #",type:"number"},
+];
+const CONTRACTOR_FIELDS = [
+  {key:"id",label:"Contractor ID"},{key:"name",label:"Company Name",full:true},
+  {key:"category",label:"Category",type:"select",options:["Aircraft Maintenance Organisation (AMO)","Avionics & Instruments","Fuel Supplier","Ground Handling","Aircraft Parts & Supplies","Simulator Provider","Medical Examiner (AME)","Meteorological Services","Air Traffic Services","Insurance Provider","Catering & Facilities","IT & Software Services","Training Device Maintenance","Security Services"]},
+  {key:"status",label:"Status",type:"select",options:["Approved","Conditional","Probation","Disqualified"]},
+  {key:"rating",label:"Rating",type:"select",options:["A+","A","B","C","F"]},
+  {key:"contact",label:"Contact Email"},{key:"country",label:"Country"},
+  {key:"last_audit",label:"Last Audit Date",type:"date"},{key:"next_audit",label:"Next Audit Date",type:"date"},
+];
+
+
+// ─── Risk Register ────────────────────────────────────────────
+// ICAO SMS Annex 19 -- 5×5 Risk Matrix
+// Severity: Catastrophic(5) / Hazardous(4) / Major(3) / Minor(2) / Negligible(1)
+// Likelihood: Frequent(5) / Occasional(4) / Remote(3) / Improbable(2) / Extremely Improbable(1)
+// Risk Index = Severity × Likelihood
+// Critical ≥15 | High 10–14 | Medium 5-9 | Low ≤4
+
+const RISK_SEVERITY = [
+  {value:5,label:"Catastrophic",desc:"Hull loss, multiple fatalities"},
+  {value:4,label:"Hazardous",   desc:"Serious injury, major damage"},
+  {value:3,label:"Major",       desc:"Serious incident, injury"},
+  {value:2,label:"Minor",       desc:"Incident, minor injury"},
+  {value:1,label:"Negligible",  desc:"Nuisance, little consequence"},
+];
+const RISK_LIKELIHOOD = [
+  {value:5,label:"Frequent",              desc:"Likely to occur many times"},
+  {value:4,label:"Occasional",            desc:"Likely to occur sometimes"},
+  {value:3,label:"Remote",                desc:"Unlikely but possible"},
+  {value:2,label:"Improbable",            desc:"Very unlikely to occur"},
+  {value:1,label:"Extremely Improbable",  desc:"Almost inconceivable"},
+];
+const RISK_CATEGORIES = ["Flight Operations","Ground Operations","Training","Maintenance","Security","Environmental","Organisational"];
+
+const riskRating=(s,l)=>{
+  const idx=s*l;
+  if(idx>=15) return {label:"Critical",color:"#b71c1c",bg:"#ffebee"};
+  if(idx>=10) return {label:"High",    color:"#e65100",bg:"#fff3e0"};
+  if(idx>=5)  return {label:"Medium",  color:"#f57f17",bg:"#fffde7"};
+  return              {label:"Low",    color:"#2e7d32",bg:"#e8f5e9"};
+};
+
+const RiskMatrix = ({ severity, likelihood, onSelect }) => {
+  const sev=[5,4,3,2,1]; const lik=[1,2,3,4,5];
+  const cellColor=(s,l)=>{
+    const r=riskRating(s,l);
+    const isSelected=s===severity&&l===likelihood;
+    return {background:isSelected?r.color:r.bg, color:isSelected?"#fff":r.color,
+      border:isSelected?`2px solid ${r.color}`:`1px solid ${r.color}33`,
+      fontWeight:isSelected?700:400, transform:isSelected?"scale(1.08)":"scale(1)", transition:"all 0.15s"};
+  };
+  return (
+    <div style={{ overflowX:"auto", marginBottom:16 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>
+        Risk Matrix -- click to select Severity × Likelihood
+      </div>
+      <table style={{ borderCollapse:"collapse", fontSize:11 }}>
+        <thead>
+          <tr>
+            <th style={{ padding:"6px 10px", background:"#f5f8fc", border:`1px solid ${T.border}`, fontSize:10, color:T.muted, whiteSpace:"nowrap" }}>Severity ↓ / Likelihood →</th>
+            {lik.map(l=><th key={l} style={{ padding:"6px 10px", background:"#f5f8fc", border:`1px solid ${T.border}`, textAlign:"center", minWidth:70, fontSize:10, color:T.muted }}>
+              {RISK_LIKELIHOOD.find(x=>x.value===l)?.label}
+            </th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {sev.map(s=>(
+            <tr key={s}>
+              <td style={{ padding:"6px 10px", background:"#f5f8fc", border:`1px solid ${T.border}`, fontWeight:600, fontSize:11, color:T.text, whiteSpace:"nowrap" }}>
+                {RISK_SEVERITY.find(x=>x.value===s)?.label}
+              </td>
+              {lik.map(l=>{
+                const r=riskRating(s,l); const cs=cellColor(s,l);
+                return (
+                  <td key={l} onClick={()=>onSelect&&onSelect(s,l)}
+                    style={{ padding:"8px 6px", border:`1px solid ${T.border}`, textAlign:"center", cursor:onSelect?"pointer":"default", ...cs, userSelect:"none", borderRadius:4 }}>
+                    <div style={{ fontSize:12, fontWeight:cs.fontWeight }}>{s*l}</div>
+                    <div style={{ fontSize:9, marginTop:1 }}>{r.label}</div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display:"flex", gap:12, marginTop:8, flexWrap:"wrap" }}>
+        {[{label:"Critical",color:"#b71c1c"},{label:"High",color:"#e65100"},{label:"Medium",color:"#f57f17"},{label:"Low",color:"#2e7d32"}].map(r=>(
+          <div key={r.label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11 }}>
+            <div style={{ width:12,height:12,borderRadius:2,background:r.color }}/>
+            <span style={{ color:T.muted }}>{r.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const RiskModal = ({ risk, cars, onSave, onClose }) => {
+  const genId=()=>`RSK-${String(Date.now()).slice(-6)}`;
+  const [form, setForm] = useState(risk || { id:genId(), status:"Open", severity:3, likelihood:3 });
+  const [showMatrix, setShowMatrix] = useState(false);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  const inherentRating = riskRating(Number(form.severity)||1, Number(form.likelihood)||1);
+  const residualRating = riskRating(Number(form.residual_severity||form.severity)||1, Number(form.residual_likelihood||form.likelihood)||1);
+
+  return (
+    <ModalShell title={(risk?"Edit":"New")+" Hazard / Risk"} onClose={onClose} wide>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+        {/* Identification */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.primary, letterSpacing:1, textTransform:"uppercase", marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>1. Hazard Identification</div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Input label="Hazard ID" value={form.id} onChange={e=>set("id",e.target.value)} />
+        </div>
+        <Select label="Category" value={form.category||""} onChange={e=>set("category",e.target.value)}>
+          <option value="">Select…</option>
+          {RISK_CATEGORIES.map(c=><option key={c}>{c}</option>)}
+        </Select>
+        <Input label="Date Identified" type="date" value={form.date_identified||""} onChange={e=>set("date_identified",e.target.value)} />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Hazard Description" value={form.hazard_description||""} onChange={e=>set("hazard_description",e.target.value)} rows={2}/>
+        </div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Potential Consequence" value={form.consequence||""} onChange={e=>set("consequence",e.target.value)} rows={2}/>
+        </div>
+        <Input label="Identified By" value={form.identified_by||""} onChange={e=>set("identified_by",e.target.value)} />
+        <Select label="Linked CAR (optional)" value={form.linked_car_id||""} onChange={e=>set("linked_car_id",e.target.value)}>
+          <option value="">None</option>
+          {cars.map(c=><option key={c.id} value={c.id}>{c.id}</option>)}
+        </Select>
+
+        {/* Inherent Risk */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.yellow, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>2. Inherent Risk (Before Controls)</div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <button onClick={()=>setShowMatrix(p=>!p)} style={{ background:T.primaryLt, border:`1px solid ${T.border}`, borderRadius:6, padding:"6px 14px", fontSize:12, color:T.primary, cursor:"pointer", marginBottom:8 }}>
+            {showMatrix?"Hide":"Show"} 5×5 Risk Matrix
+          </button>
+          {showMatrix&&<RiskMatrix severity={Number(form.severity)} likelihood={Number(form.likelihood)} onSelect={(s,l)=>{set("severity",s);set("likelihood",l);}} />}
+        </div>
+        <Select label="Severity" value={String(form.severity||3)} onChange={e=>set("severity",Number(e.target.value))}>
+          {RISK_SEVERITY.map(s=><option key={s.value} value={s.value}>{s.value} — {s.label}</option>)}
+        </Select>
+        <Select label="Likelihood" value={String(form.likelihood||3)} onChange={e=>set("likelihood",Number(e.target.value))}>
+          {RISK_LIKELIHOOD.map(l=><option key={l.value} value={l.value}>{l.value} -- {l.label}</option>)}
+        </Select>
+        <div style={{ gridColumn:"1/-1", background:inherentRating.bg, border:`1px solid ${inherentRating.color}44`, borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontWeight:700, color:inherentRating.color, fontSize:22, fontFamily:"'Oxanium',sans-serif" }}>{(Number(form.severity)||1)*(Number(form.likelihood)||1)}</div>
+          <div>
+            <div style={{ fontWeight:700, color:inherentRating.color, fontSize:13 }}>Inherent Risk: {inherentRating.label}</div>
+            <div style={{ fontSize:11, color:T.muted }}>Severity {form.severity} × Likelihood {form.likelihood}</div>
+          </div>
+        </div>
+
+        {/* Controls & Treatment */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.teal, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>3. Risk Controls & Treatment</div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Existing Controls" value={form.existing_controls||""} onChange={e=>set("existing_controls",e.target.value)} rows={2}/>
+        </div>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Treatment Action" value={form.treatment_action||""} onChange={e=>set("treatment_action",e.target.value)} rows={2}/>
+        </div>
+        <Input label="Responsible Person" value={form.responsible_person||""} onChange={e=>set("responsible_person",e.target.value)} />
+        <Input label="Target Date" type="date" value={form.target_date||""} onChange={e=>set("target_date",e.target.value)} />
+
+        {/* Residual Risk */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.green, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>4. Residual Risk (After Controls)</div>
+        <Select label="Residual Severity" value={String(form.residual_severity||form.severity||3)} onChange={e=>set("residual_severity",Number(e.target.value))}>
+          {RISK_SEVERITY.map(s=><option key={s.value} value={s.value}>{s.value} — {s.label}</option>)}
+        </Select>
+        <Select label="Residual Likelihood" value={String(form.residual_likelihood||form.likelihood||3)} onChange={e=>set("residual_likelihood",Number(e.target.value))}>
+          {RISK_LIKELIHOOD.map(l=><option key={l.value} value={l.value}>{l.value} -- {l.label}</option>)}
+        </Select>
+        <div style={{ gridColumn:"1/-1", background:residualRating.bg, border:`1px solid ${residualRating.color}44`, borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontWeight:700, color:residualRating.color, fontSize:22, fontFamily:"'Oxanium',sans-serif" }}>{(Number(form.residual_severity||form.severity)||1)*(Number(form.residual_likelihood||form.likelihood)||1)}</div>
+          <div>
+            <div style={{ fontWeight:700, color:residualRating.color, fontSize:13 }}>Residual Risk: {residualRating.label}</div>
+            <div style={{ fontSize:11, color:T.muted }}>After controls applied</div>
+          </div>
+        </div>
+
+        {/* Status */}
+        <div style={{ gridColumn:"1/-1", fontSize:11, fontWeight:700, color:T.muted, letterSpacing:1, textTransform:"uppercase", marginTop:8, marginBottom:4, paddingBottom:4, borderBottom:`1px solid ${T.border}` }}>5. Review & Status</div>
+        <Select label="Status" value={form.status||"Open"} onChange={e=>set("status",e.target.value)}>
+          {["Open","Under Treatment","Monitoring","Closed"].map(s=><option key={s}>{s}</option>)}
+        </Select>
+        <Input label="Review Date" type="date" value={form.review_date||""} onChange={e=>set("review_date",e.target.value)} />
+        <div style={{ gridColumn:"1/-1" }}>
+          <Textarea label="Review Notes" value={form.review_notes||""} onChange={e=>set("review_notes",e.target.value)} rows={2}/>
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:12 }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn onClick={()=>{
+          const rs=Number(form.residual_severity||form.severity)||1;
+          const rl=Number(form.residual_likelihood||form.likelihood)||1;
+          const is=Number(form.severity)||1; const il=Number(form.likelihood)||1;
+          onSave({...form,
+            inherent_index:is*il, inherent_rating:riskRating(is,il).label,
+            residual_index:rs*rl, residual_rating:riskRating(rs,rl).label,
+          });
+          onClose();
+        }}>Save Risk</Btn>
+      </div>
+    </ModalShell>
+  );
+};
+
+const RiskRegisterView = ({ data, user, profile, managers, onRefresh, showToast }) => {
+  const [modal, setModal]     = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [filter, setFilter]   = useState("all");
+  const [catFilter, setCat]   = useState("all");
+  const [search, setSearch]   = useState("");
+  const [showMatrix, setShowMatrix] = useState(false);
+
+  const canEdit   = ["admin","quality_manager","quality_auditor"].includes(profile?.role);
+  const isAdmin   = profile?.role==="admin";
+
+  const risks = (data.risks||[])
+    .filter(r=>filter==="all"||r.residual_rating===filter)
+    .filter(r=>catFilter==="all"||r.category===catFilter)
+    .filter(r=>!search||JSON.stringify(r).toLowerCase().includes(search.toLowerCase()));
+
+  const stats = {
+    total:    (data.risks||[]).length,
+    critical: (data.risks||[]).filter(r=>r.residual_rating==="Critical"&&r.status!=="Closed").length,
+    high:     (data.risks||[]).filter(r=>r.residual_rating==="High"&&r.status!=="Closed").length,
+    open:     (data.risks||[]).filter(r=>r.status==="Open").length,
+    closed:   (data.risks||[]).filter(r=>r.status==="Closed").length,
+  };
+
+  const save = async(form) => {
+    const isNew=!(data.risks||[]).find(r=>r.id===form.id);
+    const payload={...form, updated_at:new Date().toISOString()};
+    if(isNew) payload.created_at=new Date().toISOString();
+    const{error}=await supabase.from(TABLES.risks).upsert(payload);
+    if(error){showToast(`Error: ${error.message}`,"error");return;}
+    await logChange({user,action:isNew?"created risk":"updated risk",table:"risk_register",recordId:form.id,recordTitle:form.hazard_description?.slice(0,60)||form.id,newData:form});
+    showToast(isNew?"Risk added":"Risk updated","success");
+    onRefresh();
+  };
+
+  const del = async(r) => {
+    if(!window.confirm(`Delete risk ${r.id}?`)) return;
+    await supabase.from(TABLES.risks).delete().eq("id",r.id);
+    showToast("Risk deleted","success"); onRefresh();
+  };
+
+  const ratingColors={Critical:"#b71c1c",High:"#e65100",Medium:"#f57f17",Low:"#2e7d32"};
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+
+      {/* KPI strip */}
+      <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+        {[
+          {label:"Total Hazards",  value:stats.total,    color:T.primary, icon:"⚠️"},
+          {label:"Critical Risks", value:stats.critical, color:"#b71c1c",  icon:"🔴"},
+          {label:"High Risks",     value:stats.high,     color:"#e65100",  icon:"🟠"},
+          {label:"Open",           value:stats.open,     color:T.yellow,   icon:"📋"},
+          {label:"Closed",         value:stats.closed,   color:T.green,    icon:"✅"},
+        ].map(k=>(
+          <div key={k.label} className="card" style={{ flex:1, minWidth:120, padding:"16px 18px", borderTop:`3px solid ${k.color}` }}>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:28, fontFamily:"'Oxanium',sans-serif", fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
+                <div style={{ fontSize:11, color:T.text, fontWeight:600, marginTop:4 }}>{k.label}</div>
+              </div>
+              <span style={{ fontSize:20, opacity:0.6 }}>{k.icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 5×5 Matrix toggle */}
+      <div className="card" style={{ padding:"14px 18px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:showMatrix?14:0 }}>
+          <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:700, fontSize:14, color:T.primaryDk }}>ICAO SMS 5×5 Risk Matrix</div>
+          <Btn size="sm" variant="ghost" onClick={()=>setShowMatrix(p=>!p)}>{showMatrix?"Hide Matrix":"Show Matrix"}</Btn>
+        </div>
+        {showMatrix&&<RiskMatrix />}
+      </div>
+
+      {/* Toolbar */}
+      <SectionHeader title="Hazard & Risk Register" subtitle="ICAO SMS Annex 19 -- Identify, assess and treat operational hazards"
+        action={canEdit&&<Btn size="sm" onClick={()=>{setEditing(null);setModal(true)}}>+ Add Hazard</Btn>}
+      />
+      <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:4 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search risks…"
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 14px", fontSize:12, width:220, color:T.text }} />
+        <select value={filter} onChange={e=>setFilter(e.target.value)}
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 12px", fontSize:12, color:T.text }}>
+          <option value="all">All Ratings</option>
+          {["Critical","High","Medium","Low"].map(r=><option key={r}>{r}</option>)}
+        </select>
+        <select value={catFilter} onChange={e=>setCat(e.target.value)}
+          style={{ background:"#fff", border:`1px solid ${T.border}`, borderRadius:7, padding:"7px 12px", fontSize:12, color:T.text }}>
+          <option value="all">All Categories</option>
+          {RISK_CATEGORIES.map(c=><option key={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {/* Risk table */}
+      <div className="card" style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:"#f5f8fc" }}>
+              {[["Risk ID","mono"],["Category",""],["Hazard Description","wrap"],["Inherent",""],["Residual",""],["Status",""],["Responsible",""],["Target Date","due"],["Linked CAR",""]].map(([label])=>(
+                <th key={label} style={{ padding:"10px 14px", textAlign:"left", color:T.muted, fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase", borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{label}</th>
+              ))}
+              {(canEdit||isAdmin)&&<th style={{ padding:"10px 14px", borderBottom:`1px solid ${T.border}`, width:100 }}/>}
+            </tr>
+          </thead>
+          <tbody>
+            {risks.length===0
+              ? <tr><td colSpan={10} style={{ padding:32, textAlign:"center", color:T.muted }}>No risks found -- click "+ Add Hazard" to begin</td></tr>
+              : risks.map(r=>{
+                const ir=riskRating(r.inherent_index?Math.round(Math.sqrt(r.inherent_index)):Number(r.severity)||1, r.inherent_index?Math.round(r.inherent_index/(Math.round(Math.sqrt(r.inherent_index))||1)):Number(r.likelihood)||1);
+                const rr={label:r.residual_rating||"Low",color:ratingColors[r.residual_rating]||T.green,bg:(riskRating(Number(r.residual_severity||r.severity)||1,Number(r.residual_likelihood||r.likelihood)||1)).bg};
+                const od=r.target_date&&!["Closed","Monitoring","Completed"].includes(r.status)&&isOverdue(r.target_date);
+                return (
+                  <tr key={r.id} className="row-hover" style={{ borderBottom:`1px solid ${T.border}`, background:od?"#fff8f8":"" }}>
+                    <td style={{ padding:"10px 14px" }}><span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11, fontWeight:600 }}>{r.id}</span></td>
+                    <td style={{ padding:"10px 14px", fontSize:12, color:T.muted }}>{r.category||"—"}</td>
+                    <td style={{ padding:"10px 14px", maxWidth:220 }}><span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.hazard_description}>{r.hazard_description||"—"}</span></td>
+                    <td style={{ padding:"10px 14px" }}>
+                      <span style={{ background:(riskRating(Number(r.severity)||1,Number(r.likelihood)||1)).bg, color:(riskRating(Number(r.severity)||1,Number(r.likelihood)||1)).color, padding:"2px 8px", borderRadius:4, fontSize:11, fontWeight:600 }}>
+                        {r.inherent_index||((Number(r.severity)||1)*(Number(r.likelihood)||1))} — {r.inherent_rating||(riskRating(Number(r.severity)||1,Number(r.likelihood)||1)).label}
+                      </span>
+                    </td>
+                    <td style={{ padding:"10px 14px" }}>
+                      <span style={{ background:rr.bg, color:rr.color, padding:"2px 8px", borderRadius:4, fontSize:11, fontWeight:600 }}>
+                        {r.residual_index||((Number(r.residual_severity||r.severity)||1)*(Number(r.residual_likelihood||r.likelihood)||1))} — {r.residual_rating||"—"}
+                      </span>
+                    </td>
+                    <td style={{ padding:"10px 14px" }}><Badge label={r.status||"Open"}/></td>
+                    <td style={{ padding:"10px 14px", fontSize:12, color:T.muted }}>{r.responsible_person||"—"}</td>
+                    <td style={{ padding:"10px 14px" }}><span style={{ color:od?T.red:T.muted, fontWeight:od?600:400, fontSize:12 }}>{fmt(r.target_date)}{od?" ⚠":""}</span></td>
+                    <td style={{ padding:"10px 14px" }}>
+                      {r.linked_car_id
+                        ? <span style={{ fontFamily:"'Source Code Pro',monospace", color:T.primary, fontSize:11 }}>{r.linked_car_id}</span>
+                        : <span style={{ color:T.light, fontSize:11 }}>—</span>}
+                    </td>
+                    {(canEdit||isAdmin)&&(
+                      <td style={{ padding:"10px 14px" }}>
+                        <div style={{ display:"flex", gap:5 }}>
+                          {canEdit&&<Btn size="sm" variant="ghost" onClick={()=>{setEditing(r);setModal(true)}}>Edit</Btn>}
+                          {isAdmin&&<Btn size="sm" variant="danger" onClick={()=>del(r)} style={{ padding:"4px 10px", fontSize:11 }}>✕</Btn>}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+
+      {modal&&<RiskModal risk={editing} cars={data.cars||[]} onSave={save} onClose={()=>{setModal(false);setEditing(null);}}/>}
+    </div>
+  );
+};
+
+
+// ─── Annual Audit Schedule Builder ────────────────────────────
+const AUDIT_AREAS = [
+  "Management Personnel Records",
+  "Ground and Flight Instructor Records",
+  "Ground School Training Records",
+  "Flight Training Records",
+  "Company Manuals and Relevant Documents",
+  "Classrooms and Facilities",
+  "Aircraft",
+  "AMO",
+  "Fuel Supplier",
+  "Safety Management Systems",
+  "Quality Management Systems",
+];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const AUDIT_TYPES = ["Internal","Supplier","External","Regulatory","Surveillance"];
+
+const FINDING_LEVELS = ["Level 1 - Major NC","Level 2 - Minor NC","Level 3 - Observation","Repeat Finding","Regulatory"];
+
+const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
+  const [tab, setTab] = useState("details");
+  const [form, setForm] = useState({
+    lead_auditor:     slot.lead_auditor||"",
+    auditee:          slot.auditee||"",
+    planned_date:     slot.planned_date||"",
+    actual_date:      slot.actual_date||"",
+    status:           slot.status||"Scheduled",
+    findings:         slot.findings||0,
+    observations:     slot.observations||0,
+    notes:            slot.notes||"",
+    audit_type:       slot.audit_type||"Internal",
+    // Report fields
+    audit_criteria:   slot.audit_criteria||"AS9100D / KCAA ANO / Quality Manual",
+    opening_brief:    slot.opening_brief||"",
+    closing_brief:    slot.closing_brief||"",
+    exec_summary:     slot.exec_summary||"",
+    positive_findings:slot.positive_findings||"",
+    distribution:     slot.distribution||"Accountable Manager, Quality Manager",
+    prepared_by:      slot.prepared_by||"",
+    approved_by:      slot.approved_by||"",
+    finding_items:    slot.finding_items||"[]",
+  });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // Finding items management
+  const [findingItems, setFindingItems] = useState(()=>{
+    try { return JSON.parse(slot.finding_items||"[]"); } catch { return []; }
+  });
+  const [attachments, setAttachments] = useState(()=>{
+    try { return JSON.parse(slot.attachments||"[]"); } catch { return []; }
+  });
+  const addAttachment = async(files) => {
+    const readFile = (f) => new Promise((res) => {
+      const reader = new FileReader();
+      reader.onload = (e) => res({ name:f.name, size:f.size, type:f.type, addedAt:new Date().toISOString(), dataUrl:e.target.result });
+      reader.readAsDataURL(f);
+    });
+    const newFiles = await Promise.all(Array.from(files).map(readFile));
+    setAttachments(p=>[...p,...newFiles]);
+  };
+  const removeAttachment = (idx) => setAttachments(p=>p.filter((_,i)=>i!==idx));
+  const addFinding = () => setFindingItems(p=>[...p,{id:Date.now(),ref:"",level:"Level 2 - Minor NC",description:"",clause:"",requirement:"",evidence:"",car_raised:false}]);
+  const updateFinding = (id,k,v) => setFindingItems(p=>p.map(f=>f.id===id?{...f,[k]:v}:f));
+  const removeFinding = (id) => setFindingItems(p=>p.filter(f=>f.id!==id));
+
+  const handleSave = () => {
+    const items = JSON.stringify(findingItems);
+    const atts  = JSON.stringify(attachments);
+    const level1 = findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length;
+    const level2 = findingItems.filter(f=>f.level.includes("Level 2")).length;
+    const obs    = findingItems.filter(f=>f.level.includes("Observation")).length;
+    onSave({
+      ...slot,...form,
+      finding_items: items,
+      attachments: atts,
+      findings: level1+level2,
+      observations: obs,
+    });
+  };
+
+  const inputStyle = { width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box",background:"#fff" };
+  const labelStyle = { fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 };
+  const sectionStyle = { borderTop:"2px solid #eef2f7",paddingTop:16,marginTop:4 };
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:"#fff",borderRadius:14,width:720,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 8px 50px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ background:"linear-gradient(135deg,#01579b,#0277bd)",padding:"18px 24px",borderRadius:"14px 14px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
+          <div>
+            <div style={{ color:"rgba(255,255,255,0.7)",fontSize:11,textTransform:"uppercase",letterSpacing:1 }}>Audit Record</div>
+            <div style={{ color:"#fff",fontWeight:700,fontSize:16 }}>{slot.area} — {MONTHS[(slot.month||1)-1]} {slot.year} (Slot #{slot.slot})</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer" }}>✕</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex",borderBottom:"2px solid #eef2f7",background:"#fafbfc",flexShrink:0 }}>
+          {[["details","📋 Details"],["report","📄 Audit Report"],["findings","🔍 Findings ("+findingItems.length+")"],["attachments","📎 Attachments ("+attachments.length+")"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding:"12px 20px",border:"none",borderBottom:tab===id?"3px solid #01579b":"3px solid transparent",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,color:tab===id?"#01579b":"#5f7285",background:"transparent",marginBottom:-2 }}>{label}</button>
+          ))}
+        </div>
+
+        <div style={{ padding:24,overflowY:"auto",flex:1 }}>
+
+          {/* ── DETAILS TAB ── */}
+          {tab==="details" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div><label style={labelStyle}>Audit Type</label>
+                  <select value={form.audit_type} onChange={e=>set("audit_type",e.target.value)} style={inputStyle}>
+                    {AUDIT_TYPES.map(t=><option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyle}>Status</label>
+                  <select value={form.status} onChange={e=>set("status",e.target.value)} style={inputStyle}>
+                    {["Scheduled","In Progress","Completed","Cancelled","Overdue"].map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyle}>Lead Auditor</label>
+                  <input value={form.lead_auditor} onChange={e=>set("lead_auditor",e.target.value)} placeholder="Name" style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Auditee / Department</label>
+                  <input value={form.auditee} onChange={e=>set("auditee",e.target.value)} placeholder="Dept or person" style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Planned Date</label>
+                  <input type="date" value={form.planned_date} onChange={e=>set("planned_date",e.target.value)} style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Actual Date</label>
+                  <input type="date" value={form.actual_date} onChange={e=>set("actual_date",e.target.value)} style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Opening Brief Time</label>
+                  <input value={form.opening_brief} onChange={e=>set("opening_brief",e.target.value)} placeholder="e.g. 09:00" style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Closing Brief Time</label>
+                  <input value={form.closing_brief} onChange={e=>set("closing_brief",e.target.value)} placeholder="e.g. 15:00" style={inputStyle}/>
+                </div>
+              </div>
+              <div><label style={labelStyle}>Audit Criteria / Reference Documents</label>
+                <input value={form.audit_criteria} onChange={e=>set("audit_criteria",e.target.value)} style={inputStyle}/>
+              </div>
+              <div><label style={labelStyle}>Notes / Scope</label>
+                <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="Scope, methodology, areas covered..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+
+          {/* ── REPORT TAB ── */}
+          {tab==="report" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
+              <div style={{ padding:"10px 14px",background:"#e3f2fd",borderRadius:8,fontSize:12,color:"#01579b",borderLeft:"4px solid #01579b" }}>
+                Complete this section after the audit is conducted. This forms the official audit report.
+              </div>
+              <div><label style={labelStyle}>Executive Summary</label>
+                <textarea value={form.exec_summary} onChange={e=>set("exec_summary",e.target.value)} rows={5} placeholder="Provide an overall assessment of the audit area. Summarise the general level of compliance, key strengths and areas requiring improvement..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+              <div style={sectionStyle}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.primaryDk,marginBottom:12,textTransform:"uppercase",letterSpacing:0.5 }}>Summary of Results</div>
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12 }}>
+                  {[
+                    {label:"Level 1 / Major NCs",val:findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length,color:"#c62828",bg:"#ffebee"},
+                    {label:"Level 2 / Minor NCs",val:findingItems.filter(f=>f.level.includes("Level 2")).length,color:"#e65100",bg:"#fff3e0"},
+                    {label:"Observations",val:findingItems.filter(f=>f.level.includes("Observation")).length,color:"#01579b",bg:"#e3f2fd"},
+                  ].map(s=>(
+                    <div key={s.label} style={{ background:s.bg,borderRadius:8,padding:"12px 14px",textAlign:"center" }}>
+                      <div style={{ fontSize:28,fontWeight:800,color:s.color }}>{s.val}</div>
+                      <div style={{ fontSize:11,color:s.color,fontWeight:600 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={sectionStyle}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.primaryDk,marginBottom:12,textTransform:"uppercase",letterSpacing:0.5 }}>Positive Findings / Commendations</div>
+                <textarea value={form.positive_findings} onChange={e=>set("positive_findings",e.target.value)} rows={3} placeholder="Record any areas of good practice, compliance excellence or commendations noted during the audit..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+              <div style={sectionStyle}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.primaryDk,marginBottom:12,textTransform:"uppercase",letterSpacing:0.5 }}>Report Administration</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                  <div><label style={labelStyle}>Prepared By</label>
+                    <input value={form.prepared_by} onChange={e=>set("prepared_by",e.target.value)} placeholder="Lead Auditor name" style={inputStyle}/>
+                  </div>
+                  <div><label style={labelStyle}>Approved By</label>
+                    <input value={form.approved_by} onChange={e=>set("approved_by",e.target.value)} placeholder="Quality Manager name" style={inputStyle}/>
+                  </div>
+                  <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Distribution List</label>
+                    <input value={form.distribution} onChange={e=>set("distribution",e.target.value)} placeholder="e.g. Accountable Manager, Quality Manager, Auditee" style={inputStyle}/>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── FINDINGS TAB ── */}
+          {tab==="findings" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ fontSize:13,color:T.muted }}>Record each individual finding. Findings will auto-populate the report summary.</div>
+                <Btn size="sm" onClick={addFinding}>+ Add Finding</Btn>
+              </div>
+              {findingItems.length===0 && (
+                <div style={{ padding:40,textAlign:"center",background:"#f5f8fc",borderRadius:10,border:"2px dashed #dde3ea" }}>
+                  <div style={{ fontSize:32,marginBottom:8 }}>🔍</div>
+                  <div style={{ fontSize:14,fontWeight:600,color:T.muted,marginBottom:4 }}>No findings recorded</div>
+                  <div style={{ fontSize:12,color:T.muted,marginBottom:16 }}>Add findings, observations and non-conformances from this audit</div>
+                  <Btn size="sm" onClick={addFinding}>+ Add First Finding</Btn>
+                </div>
+              )}
+              {findingItems.map((f,i)=>{
+                const levelColors = {
+                  "Level 1 - Major NC":   {bg:"#ffebee",border:"#ef9a9a",text:"#c62828"},
+                  "Level 2 - Minor NC":   {bg:"#fff3e0",border:"#ffcc80",text:"#e65100"},
+                  "Level 3 - Observation":{bg:"#e3f2fd",border:"#90caf9",text:"#01579b"},
+                  "Repeat Finding":       {bg:"#fce4ec",border:"#f48fb1",text:"#880e4f"},
+                  "Regulatory":           {bg:"#ffebee",border:"#ef9a9a",text:"#b71c1c"},
+                };
+                const lc = levelColors[f.level]||levelColors["Level 2 - Minor NC"];
+                return (
+                  <div key={f.id} style={{ border:`2px solid ${lc.border}`,borderRadius:10,overflow:"hidden" }}>
+                    <div style={{ padding:"8px 14px",background:lc.bg,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                        <span style={{ fontSize:12,fontWeight:700,color:lc.text }}>Finding #{i+1}</span>
+                        <select value={f.level} onChange={e=>updateFinding(f.id,"level",e.target.value)} style={{ fontSize:11,fontWeight:700,color:lc.text,background:lc.bg,border:`1px solid ${lc.border}`,borderRadius:6,padding:"2px 6px",cursor:"pointer" }}>
+                          {FINDING_LEVELS.map(l=><option key={l}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                        <label style={{ display:"flex",alignItems:"center",gap:4,fontSize:11,color:lc.text,fontWeight:600,cursor:"pointer" }}>
+                          <input type="checkbox" checked={f.car_raised} onChange={e=>updateFinding(f.id,"car_raised",e.target.checked)}/>
+                          CAR Raised
+                        </label>
+                        <button onClick={()=>removeFinding(f.id)} style={{ background:"none",border:"none",color:lc.text,cursor:"pointer",fontSize:16,fontWeight:700 }}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{ padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,background:"#fff" }}>
+                      <div><label style={labelStyle}>Finding Reference</label>
+                        <input value={f.ref} onChange={e=>updateFinding(f.id,"ref",e.target.value)} placeholder="e.g. F-001" style={inputStyle}/>
+                      </div>
+                      <div><label style={labelStyle}>QMS Clause / Reference</label>
+                        <input value={f.clause} onChange={e=>updateFinding(f.id,"clause",e.target.value)} placeholder="e.g. 8.5.2" style={inputStyle}/>
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Finding Description</label>
+                        <textarea value={f.description} onChange={e=>updateFinding(f.id,"description",e.target.value)} rows={3} placeholder="Describe the non-conformance or observation in detail. State what was found, where, and when..." style={{...inputStyle,resize:"vertical"}}/>
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Requirement / Standard</label>
+                        <textarea value={f.requirement} onChange={e=>updateFinding(f.id,"requirement",e.target.value)} rows={2} placeholder="State the specific requirement that is not being met..." style={{...inputStyle,resize:"vertical"}}/>
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Objective Evidence</label>
+                        <textarea value={f.evidence} onChange={e=>updateFinding(f.id,"evidence",e.target.value)} rows={2} placeholder="Describe the objective evidence observed (documents reviewed, records sighted, personnel interviewed)..." style={{...inputStyle,resize:"vertical"}}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── ATTACHMENTS TAB ── */}
+          {tab==="attachments" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ fontSize:13,color:T.muted }}>Attach checklists, reference documents or supporting materials to this audit.</div>
+                <label style={{ cursor:"pointer" }}>
+                  <input type="file" multiple style={{ display:"none" }} onChange={e=>addAttachment(e.target.files)}/>
+                  <span style={{ background:T.primary,color:"#fff",padding:"7px 14px",borderRadius:8,fontSize:13,fontWeight:600 }}>+ Add Files</span>
+                </label>
+              </div>
+              {attachments.length===0 ? (
+                <label style={{ cursor:"pointer",display:"block" }}>
+                  <input type="file" multiple style={{ display:"none" }} onChange={e=>addAttachment(e.target.files)}/>
+                  <div style={{ padding:40,textAlign:"center",background:"#f5f8fc",borderRadius:10,border:"2px dashed #dde3ea" }}>
+                    <div style={{ fontSize:32,marginBottom:8 }}>📎</div>
+                    <div style={{ fontSize:14,fontWeight:600,color:T.muted,marginBottom:4 }}>No attachments yet</div>
+                    <div style={{ fontSize:12,color:T.muted }}>Click to attach checklists, reference documents or supporting materials</div>
+                  </div>
+                </label>
+              ) : (
+                <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+                  {attachments.map((f,i)=>(
+                    <div key={i} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:"#f5f8fc",border:"1px solid #dde3ea",borderRadius:8,padding:"10px 14px" }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                        <span style={{ fontSize:20 }}>
+                          {f.name&&f.name.endsWith(".pdf")?"📄":f.name&&f.name.match(/\.(doc|docx)$/)?"📝":f.name&&f.name.match(/\.(xls|xlsx)$/)?"📊":"📎"}
+                        </span>
+                        <div>
+                          <div style={{ fontSize:13,fontWeight:600,color:T.primaryDk }}>{f.name}</div>
+                          <div style={{ fontSize:11,color:T.muted }}>{f.size?Math.round(f.size/1024)+"KB":""}{f.addedAt?" · Added "+new Date(f.addedAt).toLocaleDateString("en-GB"):""}</div>
+                        </div>
+                      </div>
+                      <button onClick={()=>removeAttachment(i)} style={{ background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,fontWeight:700,lineHeight:1 }}>✕</button>
+                    </div>
+                  ))}
+                  <label style={{ cursor:"pointer",display:"block" }}>
+                    <input type="file" multiple style={{ display:"none" }} onChange={e=>addAttachment(e.target.files)}/>
+                    <div style={{ padding:"10px 14px",textAlign:"center",background:"#f5f8fc",borderRadius:8,border:"1.5px dashed #dde3ea",fontSize:12,color:T.muted,fontWeight:600 }}>
+                      + Add more files
+                    </div>
+                  </label>
+                </div>
+              )}
+              <div style={{ padding:"10px 14px",background:"#e3f2fd",borderRadius:8,fontSize:12,color:"#01579b",borderLeft:"4px solid #01579b" }}>
+                Attachment names are listed on the printed Audit Notification Form (QMS 002). Save the record to retain the attachment list.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",padding:"16px 24px",borderTop:"1px solid #eef2f7",background:"#fafbfc",flexShrink:0,flexWrap:"wrap" }}>
+          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+          <Btn variant="ghost" onClick={()=>generateNotificationPDF({...slot,...form,attachments})}>🔔 Notification Form</Btn>
+          {slot.status==="Completed"&&<Btn variant="ghost" onClick={()=>generateAuditReport({...slot,...form,finding_items:JSON.stringify(findingItems)})}>📄 Audit Report PDF</Btn>}
+          <Btn onClick={handleSave}>💾 Save Audit Record</Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Audit Report PDF Generator ───────────────────────────────
+const generateAuditReport = async (slot) => {
+  const { jsPDF } = await import("jspdf");
+  const { default: autoTable } = await import("jspdf-autotable");
+  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const W=210; const M=14; const col=W-M*2;
+  const LINE_H=4.5; const LABEL_SZ=6.5; const BODY_SZ=9;
+
+  let findingItems = [];
+  try { findingItems = JSON.parse(slot.finding_items||"[]"); } catch {}
+
+  // ── helpers (same pattern as CAPA PDF) ──
+  const sectionTitle = (text, y, color=[1,87,155]) => {
+    doc.setFillColor(...color); doc.rect(M,y,col,7,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text(text, M+3, y+4.8); doc.setTextColor(0,0,0);
+    return y+9;
+  };
+  const box = (label, value, x, y, w) => {
+    doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+    const lines = doc.splitTextToSize(String(value||"—"), w-5);
+    const h = 5+4+lines.length*LINE_H+3;
+    doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
+    doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), x+2.5, y+4);
+    doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+    doc.text(lines, x+2.5, y+4+LINE_H+1);
+    return y+h+2;
+  };
+  const boxRow = (pairs, x, y, totalW) => {
+    const gap=2; const n=pairs.length; const w=(totalW-(n-1)*gap)/n;
+    let maxH=0;
+    pairs.forEach(([,val])=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+      const lines=doc.splitTextToSize(String(val||"—"),w-5);
+      const h=5+4+lines.length*LINE_H+3; if(h>maxH) maxH=h;
+    });
+    pairs.forEach(([label,val],i)=>{
+      const bx=x+i*(w+gap);
+      doc.setFillColor(245,248,252); doc.rect(bx,y,w,maxH,"F");
+      doc.setDrawColor(221,227,234); doc.rect(bx,y,w,maxH,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text(label.toUpperCase(), bx+2.5, y+4);
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+      const lines=doc.splitTextToSize(String(val||"—"),w-5);
+      doc.text(lines, bx+2.5, y+4+LINE_H+1);
+    });
+    return y+maxH+2;
+  };
+  const FOOTER_Y=287; const NEW_PAGE_Y=20;
+  const needPage = (cy, need=20) => { if(cy+need>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; } return cy; };
+  const addFooter = () => {
+    const pages = doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,286,W-M,286);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+      doc.text("Pegasus Flyers (E.A.) Ltd. · Quality Management System · Audit Report", M, 290);
+      doc.text(`Page ${i} of ${pages}`, W-M, 290, {align:"right"});
+    }
+  };
+
+  // ── HEADER ──────────────────────────────────────────────────
+  doc.setFillColor(26,35,50); doc.rect(0,0,W,28,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(255,255,255);
+  doc.text("AeroQualify Pro", M, 11);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,185,210);
+  doc.text("AUDIT REPORT", M, 17);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(160,185,210);
+  doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi  |  +254206001467/8", W-M, 11, {align:"right"});
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`, W-M, 17, {align:"right"});
+
+  let y = 34;
+
+  // ── AUDIT IDENTITY BAR ───────────────────────────────────────
+  const statusColors = {
+    Completed:[46,125,50], "In Progress":[1,87,155],
+    Scheduled:[245,127,23], Overdue:[198,40,40], Cancelled:[117,117,117]
+  };
+  const sc = statusColors[slot.status]||[1,87,155];
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,16,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,16,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor(26,35,50);
+  doc.text(`${slot.area} — Audit Slot #${slot.slot}`, M+4, y+7);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(95,114,133);
+  doc.text(`${MONTHS[(slot.month||1)-1]} ${slot.year}  ·  ${slot.audit_type||"Internal"}`, M+4, y+13);
+  // Status badge
+  doc.setFillColor(...sc); doc.roundedRect(W-M-28, y+4, 26, 8, 2, 2, "F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
+  doc.text((slot.status||"Scheduled").toUpperCase(), W-M-15, y+9.2, {align:"center"});
+  y += 20;
+
+  // ── SECTION 1: AUDIT DETAILS ─────────────────────────────────
+  y = needPage(y,12); y = sectionTitle("SECTION 1 — AUDIT DETAILS", y);
+  y = boxRow([["Lead Auditor", slot.lead_auditor||"—"],["Auditee / Department", slot.auditee||"—"]], M, y, col);
+  y = boxRow([["Planned Date", slot.planned_date||"—"],["Actual Date", slot.actual_date||"—"]], M, y, col);
+  y = boxRow([["Opening Brief", slot.opening_brief||"—"],["Closing Brief", slot.closing_brief||"—"]], M, y, col);
+  y = needPage(y,20); y = box("Audit Criteria / Reference Documents", slot.audit_criteria||"—", M, y, col);
+  y = needPage(y,20); y = box("Scope / Areas Covered", slot.notes||"—", M, y, col);
+  y += 4;
+
+  // ── SECTION 2: EXECUTIVE SUMMARY ────────────────────────────
+  y = needPage(y,12); y = sectionTitle("SECTION 2 — EXECUTIVE SUMMARY", y, [0,105,92]);
+  y = needPage(y,20); y = box("Executive Summary", slot.exec_summary||"—", M, y, col);
+
+  // Results summary boxes
+  y = needPage(y,22);
+  const level1 = findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length;
+  const level2 = findingItems.filter(f=>f.level.includes("Level 2")).length;
+  const obs    = findingItems.filter(f=>f.level.includes("Observation")).length;
+  const repeat = findingItems.filter(f=>f.level==="Repeat Finding").length;
+  const resultW = (col-6)/4;
+  [
+    ["Level 1 / Major NCs", level1, [198,40,40]],
+    ["Level 2 / Minor NCs", level2, [230,81,0]],
+    ["Observations",        obs,    [1,87,155]],
+    ["Repeat Findings",     repeat, [136,14,79]],
+  ].forEach(([label, val, color], i) => {
+    const bx = M + i*(resultW+2);
+    doc.setFillColor(color[0],color[1],color[2]); doc.rect(bx,y,resultW,18,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
+    doc.text(String(val), bx+resultW/2, y+11, {align:"center"});
+    doc.setFontSize(6); doc.text(label.toUpperCase(), bx+resultW/2, y+16, {align:"center"});
+  });
+  y += 22;
+
+  if(slot.positive_findings){
+    y = needPage(y,20); y = box("Positive Findings / Commendations", slot.positive_findings, M, y, col);
+  }
+  y += 4;
+
+  // ── SECTION 3: FINDINGS DETAIL ───────────────────────────────
+  if(findingItems.length > 0){
+    y = needPage(y,12); y = sectionTitle("SECTION 3 — DETAILED FINDINGS", y, [183,28,28]);
+    findingItems.forEach((f, fi) => {
+      y = needPage(y, 50);
+      const levelC = f.level.includes("Level 1")||f.level==="Regulatory" ? [198,40,40] :
+                     f.level.includes("Level 2") ? [230,81,0] :
+                     f.level==="Repeat Finding"  ? [136,14,79] : [1,87,155];
+      // Finding header bar
+      doc.setFillColor(...levelC); doc.rect(M,y,col,7,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+      doc.text(`Finding #${fi+1}  —  ${f.level}${f.ref?" ("+f.ref+")":""}`, M+3, y+4.8);
+      if(f.car_raised){ doc.text("CAR RAISED ✓", W-M-3, y+4.8, {align:"right"}); }
+      y += 9;
+      if(f.clause){ y = boxRow([["QMS Clause / Reference", f.clause],["Car Raised", f.car_raised?"Yes":"No"]], M, y, col); }
+      y = needPage(y,20); y = box("Finding Description", f.description||"—", M, y, col);
+      if(f.requirement){ y = needPage(y,20); y = box("Requirement / Standard Not Met", f.requirement, M, y, col); }
+      if(f.evidence){ y = needPage(y,20); y = box("Objective Evidence", f.evidence, M, y, col); }
+      y += 4;
+    });
+  } else {
+    y = needPage(y,12); y = sectionTitle("SECTION 3 — DETAILED FINDINGS", y, [183,28,28]);
+    y = needPage(y,14); y = box("Findings", "No findings or non-conformances recorded for this audit.", M, y, col);
+    y += 4;
+  }
+
+  // ── SECTION 4: REPORT ADMINISTRATION ─────────────────────────
+  y = needPage(y,12); y = sectionTitle("SECTION 4 — REPORT ADMINISTRATION", y, [69,39,160]);
+  y = boxRow([["Prepared By", slot.prepared_by||"—"],["Approved By", slot.approved_by||"—"]], M, y, col);
+  y = needPage(y,20); y = box("Distribution List", slot.distribution||"—", M, y, col);
+  y += 4;
+
+  // ── SIGNATURE BLOCK ───────────────────────────────────────────
+  y = needPage(y, 40);
+  doc.setDrawColor(221,227,234); doc.setLineWidth(0.3);
+  const sigW = (col-4)/2;
+  [["Lead Auditor Signature", slot.lead_auditor||""], ["Quality Manager Signature", slot.approved_by||""]].forEach(([label, name], i) => {
+    const bx = M + i*(sigW+4);
+    doc.setFillColor(245,248,252); doc.rect(bx,y,sigW,22,"F");
+    doc.rect(bx,y,sigW,22,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), bx+3, y+5);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+    doc.text(name, bx+3, y+13);
+    doc.setDrawColor(170,190,210); doc.line(bx+3, y+18, bx+sigW-3, y+18);
+    doc.setFontSize(7); doc.setTextColor(140,160,180);
+    doc.text("Signature / Date", bx+3, y+21);
+  });
+
+  addFooter();
+  const filename = `Audit-Report-${slot.area.replace(/\s+/g,"-")}-${slot.year}-Slot${slot.slot}.pdf`;
+  doc.save(filename);
+};
+
+
+const SCHEDULE_PASSWORD = "QM2024!";
+
+// ── Schedule PDF export ────────────────────────────────────────
+const generateSchedulePDF = async (yearSlots, year, approval) => {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
+  const W=297; const H=210; const M=12; const col=W-M*2;
+  const addFooter = () => {
+    const pages = doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,H-8,W-M,H-8);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+      doc.text("Pegasus Flyers (E.A.) Ltd. · QMS Annual Audit Programme · CONTROLLED DOCUMENT", M, H-4);
+      doc.text(`Page ${i} of ${pages}`, W-M, H-4, {align:"right"});
+    }
+  };
+
+  // Header
+  doc.setFillColor(26,35,50); doc.rect(0,0,W,22,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
+  doc.text("AeroQualify Pro", M, 10);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,185,210);
+  doc.text(`ANNUAL AUDIT PROGRAMME — ${year}`, M, 17);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(160,185,210);
+  doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi", W-M, 10, {align:"right"});
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`, W-M, 17, {align:"right"});
+
+  let y = 28;
+  // Column widths
+  const areaW = 52; const monthW = (col - areaW - 22) / 12; const statusW = 22;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // Table header
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,8,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
+  doc.text("AUDIT AREA", M+2, y+5.2);
+  months.forEach((m,i) => doc.text(m, M+areaW+i*monthW+monthW/2, y+5.2, {align:"center"}));
+  doc.text("STATUS", M+areaW+12*monthW+statusW/2, y+5.2, {align:"center"});
+  y += 8;
+
+  // Rows
+  AUDIT_AREAS.forEach((area, ai) => {
+    const rowH = 10;
+    doc.setFillColor(ai%2===0?255:248,ai%2===0?255:250,ai%2===0?255:252);
+    doc.rect(M,y,col,rowH,"F");
+    doc.setDrawColor(221,227,234); doc.setLineWidth(0.2); doc.rect(M,y,col,rowH,"S");
+    doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(26,35,50);
+    doc.text(area, M+2, y+6.5);
+
+    const slot1 = yearSlots.find(s=>s.area===area&&s.slot===1);
+    const slot2 = yearSlots.find(s=>s.area===area&&s.slot===2);
+
+    months.forEach((_,mi) => {
+      const cx = M+areaW+mi*monthW+monthW/2;
+      const s1 = slot1?.month===mi+1 ? slot1 : null;
+      const s2 = slot2?.month===mi+1 ? slot2 : null;
+      const slot = s1||s2;
+      if(slot){
+        const colors = {
+          Completed:[46,125,50], "In Progress":[1,87,155],
+          Scheduled:[245,127,23], Overdue:[198,40,40], Cancelled:[117,117,117]
+        };
+        const c = colors[slot.status]||[245,127,23];
+        doc.setFillColor(...c);
+        doc.roundedRect(cx-4,y+2,8,6,1,1,"F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(5.5); doc.setTextColor(255,255,255);
+        doc.text(String(slot.slot), cx, y+6.2, {align:"center"});
+      }
+    });
+
+    // Status
+    const done = [slot1,slot2].filter(s=>s?.status==="Completed").length;
+    const statusText = done===2?"Complete":`${done}/2`;
+    const statusColor = done===2?[46,125,50]:[245,127,23];
+    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(...statusColor);
+    doc.text(statusText, M+areaW+12*monthW+statusW/2, y+6.5, {align:"center"});
+    y += rowH;
+  });
+
+  // Legend
+  y += 6;
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(95,114,133);
+  doc.text("LEGEND:", M, y);
+  [["Scheduled",[245,127,23]],["In Progress",[1,87,155]],["Completed",[46,125,50]],["Overdue",[198,40,40]],["Cancelled",[117,117,117]]].forEach(([l,c],i) => {
+    const bx = M+22+i*32;
+    doc.setFillColor(...c); doc.roundedRect(bx,y-4,8,5,1,1,"F");
+    doc.setTextColor(95,114,133); doc.setFont("helvetica","normal");
+    doc.text(l, bx+10, y);
+  });
+
+  // Approval section
+  y += 12;
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,36,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,36,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("PROGRAMME APPROVAL", M+3, y+6);
+  const sigW = (col-6)/2;
+  [
+    ["Generated By — Quality Manager", approval?.qm_name||"", approval?.qm_date||""],
+    ["Approved By — Accountable Manager", approval?.am_name||"", approval?.am_date||""],
+  ].forEach(([label, name, date], i) => {
+    const bx = M+3+i*(sigW+3);
+    doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), bx, y+13);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+    doc.text(name||"________________________________", bx, y+21);
+    doc.setFontSize(7); doc.setTextColor(95,114,133);
+    doc.text(`Date: ${date||"________________"}`, bx, y+28);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
+    doc.line(bx, y+32, bx+sigW-6, y+32);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180);
+    doc.text("Signature", bx, y+35.5);
+  });
+
+  addFooter();
+  doc.save(`Audit-Programme-${year}.pdf`);
+};
+
+// ── Audit Notification PDF ─────────────────────────────────────
+const generateNotificationPDF = async (slot) => {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const W=210; const M=14; const col=W-M*2;
+
+  const addFooter = () => {
+    const pages = doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,285,W-M,285);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+      doc.text(`Pegasus Flyers (E.A.) Ltd. · QMS 002 · Audit Notification · Ref: ${notifRef}`, M, 289);
+      doc.text(`CONTROLLED DOCUMENT  ·  Page ${i} of ${pages}`, W-M, 289, {align:"right"});
+    }
+  };
+
+  const FOOTER_Y = 276; const NEW_PAGE_Y = 20;
+  const notifRef = `ANF-${slot.year}-${String(slot.month).padStart(2,"0")}-${String(slot.slot).padStart(2,"0")}`;
+
+  const needPage = (cy, need=20) => { if(cy+need>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; } return cy; };
+
+  // ── Header ───────────────────────────────────────────────────
+  doc.setFillColor(26,35,50); doc.rect(0,0,W,28,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(255,255,255);
+  doc.text("AeroQualify Pro", M, 11);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,185,210);
+  doc.text("AUDIT NOTIFICATION FORM — QMS 002", M, 17);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(160,185,210);
+  doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi  |  +254206001467/8", W-M, 11, {align:"right"});
+  doc.text(`Issued: ${new Date().toLocaleDateString("en-GB")}`, W-M, 17, {align:"right"});
+
+  let y = 34;
+
+  // ── Ref bar ──────────────────────────────────────────────────
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,10,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(255,255,255);
+  doc.text(`Notification Reference: ${notifRef}`, M+3, y+6.5);
+  doc.text(`${slot.area}`, W-M-3, y+6.5, {align:"right"});
+  y += 14;
+
+  const hw = (col-2)/2;
+  const drawBox = (label, value, x, bY, w, h) => {
+    doc.setFillColor(245,248,252); doc.rect(x,bY,w,h,"F");
+    doc.setDrawColor(221,227,234); doc.rect(x,bY,w,h,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), x+2.5, bY+4);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    const lines = doc.splitTextToSize(String(value||"—"), w-5);
+    doc.text(lines, x+2.5, bY+9);
+    return bY+h+2;
+  };
+  const halfBox = (label, value, x, bY) => {
+    doc.setFillColor(245,248,252); doc.rect(x,bY,hw,14,"F");
+    doc.setDrawColor(221,227,234); doc.rect(x,bY,hw,14,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), x+2.5, bY+4);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    doc.text(String(value||"TBC"), x+2.5, bY+9);
+  };
+
+  // ── SECTION 1: AUDIT DETAILS ─────────────────────────────────
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 1 — AUDIT DETAILS", M+3, y+4.8);
+  y+=9;
+
+  drawBox("Audit Area", slot.area, M, y, col, 14); y+=16;
+  halfBox("Audit Type", slot.audit_type||"Internal", M, y);
+  halfBox("Audit Ref / Slot", `${slot.year} — Slot #${slot.slot}`, M+hw+2, y);
+  y+=16;
+  halfBox("Planned Date", slot.planned_date||"TBC", M, y);
+  halfBox("Lead Auditor", slot.lead_auditor||"TBC", M+hw+2, y);
+  y+=16;
+  halfBox("Opening Brief", slot.opening_brief||"TBC", M, y);
+  halfBox("Closing Brief", slot.closing_brief||"TBC", M+hw+2, y);
+  y+=16;
+  drawBox("Audit Criteria / Reference Documents", slot.audit_criteria||"AS9100D / KCAA ANO / Quality Manual", M, y, col, 14); y+=16;
+  drawBox("Scope of Audit", slot.notes||"As per Annual Audit Programme", M, y, col, 18); y+=20;
+
+  // ── SECTION 2: PLANNED SEQUENCE OF EVENTS ───────────────────
+  const phases = [
+    {
+      num:"1",
+      title:"Data Gathering and Review",
+      color:[46,125,50],
+      text:"Prior to the on-site audit, the lead auditor will conduct a desktop review of all relevant documentation, records, manuals and previous audit findings pertaining to the audit area. This phase includes review of applicable regulatory requirements, quality manual provisions and any outstanding corrective actions."
+    },
+    {
+      num:"2",
+      title:"On-Site Audit",
+      color:[1,87,155],
+      text:"The lead auditor will conduct the on-site inspection of the audit area, interviewing relevant personnel, observing processes and verifying objective evidence against established criteria. An opening brief will be held at the start and a closing brief at the conclusion of the on-site phase to discuss preliminary findings."
+    },
+    {
+      num:"3",
+      title:"Analysis and Issuance of Corrective Action Requests",
+      color:[183,28,28],
+      text:"Following the on-site audit, all findings will be analysed and classified as Level 1 (Major Non-Conformance), Level 2 (Minor Non-Conformance) or Observation. Formal Corrective Action Requests (CARs) will be issued to the Responsible Manager for all non-conformances identified, with due dates assigned in accordance with severity."
+    }
+  ];
+
+  // Pre-calculate total height for Section 2 background before drawing
+  const textIndent = M+16; const textW = col-20;
+  const PH = 4.5;    // line height for 8pt body text
+  const BADGE_H = 6; // height of phase badge/title row
+  const DESC_GAP = 2; // gap between title row and description
+  const PHASE_GAP = 6; // gap between phases
+
+  let sec2H = 5; // top padding
+  phases.forEach(phase => {
+    doc.setFont("helvetica","normal"); doc.setFontSize(8);
+    const ln = doc.splitTextToSize(phase.text, textW);
+    sec2H += BADGE_H + DESC_GAP + ln.length * PH + PHASE_GAP;
+  });
+  sec2H += 3; // bottom padding
+
+  y = needPage(y, sec2H + 9);
+  doc.setFillColor(0,105,92); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 2 — PLANNED SEQUENCE OF EVENTS", M+3, y+4.8);
+  y += 9;
+
+  // Draw background with pre-calculated height
+  doc.setFillColor(232,245,233); doc.rect(M,y,col,sec2H,"F");
+  doc.setDrawColor(200,230,201); doc.setLineWidth(0.3); doc.rect(M,y,col,sec2H,"S");
+
+  let py = y + 5;
+  phases.forEach((phase) => {
+    doc.setFont("helvetica","normal"); doc.setFontSize(8);
+    const pLines = doc.splitTextToSize(phase.text, textW);
+    const blockH = BADGE_H + DESC_GAP + pLines.length * PH;
+
+    // Coloured left accent stripe spanning full block
+    doc.setFillColor(...phase.color);
+    doc.rect(M+3, py, 2, blockH, "F");
+
+    // Phase number badge
+    doc.setFillColor(...phase.color);
+    doc.roundedRect(M+7, py, 7, 5.5, 1.5, 1.5, "F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text(phase.num, M+10.5, py + 4, {align:"center"});
+
+    // Phase title — same row as badge
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...phase.color);
+    doc.text("Phase " + phase.num + ": " + phase.title, textIndent, py + 4);
+
+    // Description — new line below badge row
+    py += BADGE_H + DESC_GAP;
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(40,50,65);
+    doc.text(pLines, textIndent, py);
+
+    py += pLines.length * PH + PHASE_GAP;
+  });
+
+  y += sec2H + 2;
+
+  // ── SECTION 3: NOTICE TO AUDITEE ─────────────────────────────
+  y = needPage(y, 28);
+  doc.setFillColor(245,127,23); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 3 — NOTICE TO AUDITEE", M+3, y+4.8);
+  y+=9;
+
+  const notice = "This notification is issued at least 7 days prior to the scheduled audit date in accordance with the Quality Manual. Please ensure all relevant records, documentation and personnel are available on the date of audit. This audit is a mandatory quality assurance activity. Your full cooperation is required and expected.";
+  doc.setFont("helvetica","normal"); doc.setFontSize(8);
+  const noticeLines = doc.splitTextToSize(notice, col-6);
+  const noticeBoxH = 5 + 5 + noticeLines.length*4.5 + 4; // top + title + text + bottom
+
+  doc.setFillColor(255,243,224); doc.rect(M,y,col,noticeBoxH,"F");
+  doc.setDrawColor(255,204,128); doc.setLineWidth(0.3); doc.rect(M,y,col,noticeBoxH,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(230,81,0);
+  doc.text("Important Notice", M+3, y+6);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text(noticeLines, M+3, y+12);
+  y += noticeBoxH + 2;
+
+  // ── Attachments — inline embedded ────────────────────────────
+  if(slot.attachments && slot.attachments.length>0){
+    y = needPage(y, 16);
+    doc.setFillColor(69,39,160); doc.rect(M,y,col,7,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text("ATTACHMENTS", M+3, y+4.8);
+    y+=9;
+
+    slot.attachments.forEach((f,idx)=>{
+      // Attachment header bar
+      y = needPage(y, 14);
+      doc.setFillColor(237,231,246); doc.rect(M,y,col,9,"F");
+      doc.setDrawColor(179,157,219); doc.setLineWidth(0.3); doc.rect(M,y,col,9,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(69,39,160);
+      doc.text(`Attachment ${idx+1}: ${f.name}`, M+3, y+5.8);
+      if(f.size){ doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(149,117,205); doc.text(Math.round(f.size/1024)+"KB", M+col-3, y+5.8, {align:"right"}); }
+      y+=11;
+
+      if(f.dataUrl){
+        const isImage = f.type && f.type.startsWith("image/");
+        const isPDF   = f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
+
+        if(isImage){
+          // Embed image inline, scaled to fit page width
+          try {
+            const imgFmt = f.type.includes("png")?"PNG":"JPEG";
+            // Create temp image to get natural dimensions
+            const img = new Image();
+            img.src = f.dataUrl;
+            // Calculate display height preserving aspect ratio, max 120mm tall
+            const maxW = col; const maxH = 120;
+            let dW = maxW; let dH = maxH;
+            if(img.naturalWidth && img.naturalHeight){
+              const ratio = img.naturalWidth / img.naturalHeight;
+              dH = Math.min(maxH, maxW / ratio);
+              dW = dH * ratio;
+              if(dW > maxW){ dW = maxW; dH = maxW / ratio; }
+            }
+            y = needPage(y, dH + 4);
+            doc.addImage(f.dataUrl, imgFmt, M, y, dW, dH);
+            y += dH + 4;
+          } catch(e){ console.warn("Image embed failed:", e); }
+
+        } else if(isPDF){
+          // For PDFs: use pdf-lib to extract pages and add to jsPDF
+          try {
+            const { PDFDocument } = await import("https://cdn.skypack.dev/pdf-lib@1.17.1");
+            const base64Data = f.dataUrl.split(",")[1];
+            const pdfBytes = Uint8Array.from(atob(base64Data), c=>c.charCodeAt(0));
+            const srcPdf = await PDFDocument.load(pdfBytes);
+            const pageCount = srcPdf.getPageCount();
+
+            // Render each PDF page as an image via canvas
+            const pdfjsLib = window["pdfjs-dist/build/pdf"];
+            if(pdfjsLib){
+              const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+              const pdfDoc2 = await loadingTask.promise;
+              for(let p=1; p<=Math.min(pageCount,10); p++){
+                const page = await pdfDoc2.getPage(p);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement("canvas");
+                canvas.width = viewport.width; canvas.height = viewport.height;
+                const ctx = canvas.getContext("2d");
+                await page.render({ canvasContext:ctx, viewport }).promise;
+                const imgData = canvas.toDataURL("image/jpeg", 0.85);
+                const ratio = viewport.width / viewport.height;
+                const dW2 = col; const dH2 = dW2 / ratio;
+                y = needPage(y, dH2 + 4);
+                doc.addImage(imgData, "JPEG", M, y, dW2, dH2);
+                y += dH2 + 4;
+                // Page label for multi-page PDFs
+                if(pageCount>1){
+                  doc.setFont("helvetica","italic"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+                  doc.text(`Page ${p} of ${pageCount}`, M+col, y-2, {align:"right"});
+                }
+              }
+              if(pageCount>10){
+                doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
+                doc.text(`[${pageCount-10} additional pages not shown — see original file]`, M+3, y+5);
+                y+=10;
+              }
+            } else {
+              // pdfjs not available — show placeholder
+              doc.setFillColor(245,248,252); doc.rect(M,y,col,14,"F");
+              doc.setDrawColor(221,227,234); doc.rect(M,y,col,14,"S");
+              doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
+              doc.text(`[PDF attached: ${f.name} — open original file to view]`, M+4, y+8.5);
+              y+=16;
+            }
+          } catch(e){
+            console.warn("PDF embed failed:", e.message);
+            doc.setFillColor(245,248,252); doc.rect(M,y,col,14,"F");
+            doc.setDrawColor(221,227,234); doc.rect(M,y,col,14,"S");
+            doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
+            doc.text(`[PDF attached: ${f.name} — open original file to view]`, M+4, y+8.5);
+            y+=16;
+          }
+
+        } else {
+          // Other file types — show name only
+          doc.setFillColor(245,248,252); doc.rect(M,y,col,12,"F");
+          doc.setDrawColor(221,227,234); doc.rect(M,y,col,12,"S");
+          doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
+          doc.text(`[${f.name} — file type cannot be rendered inline]`, M+4, y+7.5);
+          y+=14;
+        }
+      } else {
+        // No data URL (old record without base64)
+        doc.setFillColor(245,248,252); doc.rect(M,y,col,12,"F");
+        doc.setDrawColor(221,227,234); doc.rect(M,y,col,12,"S");
+        doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(140,160,180);
+        doc.text(`[${f.name} — re-attach file to enable inline preview]`, M+4, y+7.5);
+        y+=14;
+      }
+      y+=2; // gap between attachments
+    });
+  }
+
+  // ── SECTION 4: ISSUED BY ─────────────────────────────────────
+  const sigW2 = (col-6)/2;
+  y = needPage(y, 34);
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 4 — ISSUED BY — QUALITY MANAGER", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,26,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,26,"S");
+  [["Quality Manager Name & Signature",""],["Date Issued", new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    if(v) doc.text(v, bx, y+10);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+21, bx+sigW2-3, y+21);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+24.5);
+  });
+  y+=30;
+
+  // ── SECTION 5: ACKNOWLEDGEMENT OF RECEIPT ────────────────────
+  y = needPage(y, 58);
+  doc.setFillColor(26,35,50); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 5 — ACKNOWLEDGEMENT OF RECEIPT", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,52,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,52,"S");
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("Please sign below to confirm receipt of this audit notification and your response.", M+3, y+7);
+
+  // Checkboxes
+  doc.setDrawColor(26,35,50); doc.setLineWidth(0.4);
+  doc.rect(M+3, y+14, 5, 5, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(46,125,50);
+  doc.text("ACCEPT", M+10, y+18);
+  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
+  doc.text("— I confirm receipt of this notification and will make all required resources available.", M+28, y+18);
+
+  doc.rect(M+3, y+24, 5, 5, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(198,40,40);
+  doc.text("REJECT", M+10, y+28);
+  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
+  doc.text("— I am unable to accommodate this audit on the planned date. Reason:", M+28, y+28);
+  doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
+  doc.line(M+3, y+34, M+col-3, y+34);
+
+  // Signature lines
+  [["Auditee Name & Signature"],["Date of Acknowledgement"]].forEach(([l], i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setDrawColor(170,190,210); doc.line(bx, y+46, bx+sigW2-3, y+46);
+    doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(140,160,180);
+    doc.text(l, bx, y+49.5);
+  });
+  y+=56;
+
+  addFooter();
+  doc.save(`Audit-Notification-${notifRef}.pdf`);
+};
+
+const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
+  const isQM    = ["admin","quality_manager"].includes(profile?.role);
+  const isAdmin = profile?.role==="admin";
+  const [view,      setView]      = useState("schedule");
+  const [year,      setYear]      = useState(new Date().getFullYear());
+  const [modal,     setModal]     = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [pwModal,   setPwModal]   = useState(false);    // password gate
+  const [approvalModal, setApprovalModal] = useState(false); // approval fields before generate
+  const [approval,  setApproval]  = useState({ qm_name:"", qm_date:"", am_name:"", am_date:"" });
+
+  const schedule = data.auditSchedule||[];
+
+  const getSlot = (area, slotNum) =>
+    schedule.find(s=>s.area===area && s.slot===slotNum && s.year===year);
+
+  const slotColor = (slot) => {
+    if(!slot) return { bg:"#f5f8fc", border:"#dde3ea", text:"#8fa8c0", label:"Not Set" };
+    const s = slot.status;
+    if(s==="Completed")   return { bg:"#e8f5e9", border:"#a5d6a7", text:"#2e7d32", label:"Completed" };
+    if(s==="In Progress") return { bg:"#e3f2fd", border:"#90caf9", text:"#01579b", label:"In Progress" };
+    if(s==="Overdue")     return { bg:"#ffebee", border:"#ef9a9a", text:"#c62828", label:"Overdue" };
+    if(s==="Cancelled")   return { bg:"#f5f5f5", border:"#e0e0e0", text:"#757575", label:"Cancelled" };
+    return { bg:"#fff8e1", border:"#ffe082", text:"#f57f17", label:"Scheduled" };
+  };
+
+  // Password gate → approval modal → generate
+  const handleGenerateClick = () => setPwModal(true);
+
+  const generateSchedule = async () => {
+    setGenerating(true);
+    try {
+      const rows = [];
+      AUDIT_AREAS.forEach((area, idx) => {
+        const month1 = 1 + (idx % 6);
+        const month2 = 7 + (idx % 6);
+        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-1`, year, area, slot:1, month:month1, status:"Scheduled", findings:0, observations:0, qm_name:approval.qm_name, qm_date:approval.qm_date, am_name:approval.am_name, am_date:approval.am_date });
+        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-2`, year, area, slot:2, month:month2, status:"Scheduled", findings:0, observations:0, qm_name:approval.qm_name, qm_date:approval.qm_date, am_name:approval.am_name, am_date:approval.am_date });
+      });
+      const { error } = await supabase.from("audit_schedule").upsert(rows, { onConflict:"id" });
+      if(error) { showToast(`Error: ${error.message}`,"error"); return; }
+      showToast(`${year} audit schedule generated — ${rows.length} slots created`,"success");
+      setApprovalModal(false);
+      onRefresh();
+    } catch(e) { showToast(`Error: ${e.message}`,"error"); }
+    finally { setGenerating(false); }
+  };
+
+  // Save a slot + send notification email
+  const saveSlot = async (slot) => {
+    const payload = { id: slot.id||`AS-${slot.year||year}-${slot.area?.replace(/\s+/g,"-")}-${slot.slot}`, year:slot.year||year, area:slot.area, slot:slot.slot, month:slot.month, ...slot };
+    const { error } = await supabase.from("audit_schedule").upsert(payload, { onConflict:"id" });
+    if(error) { showToast(`Error: ${error.message}`,"error"); return; }
+
+    // Send notification emails when a slot has a planned date and lead auditor set
+    if(slot.planned_date && slot.lead_auditor) {
+      const am = managers.find(m=>m.role_title==="Accountable Manager");
+      const rm = managers.find(m=>m.role_title===slot.auditee) || managers.find(m=>m.role_title==="Quality Manager");
+      const recipients = [rm?.email, am?.email].filter(Boolean);
+      if(recipients.length>0){
+        await sendNotification({ type:"audit_scheduled", record:slot, recipients });
+      }
+    }
+
+    if(slot.status==="Completed" && Number(slot.findings)>0){
+      showToast(`Audit saved — ${slot.findings} finding(s) recorded. Raise CARs from the CAPA module.`,"success");
+    } else {
+      showToast("Audit slot saved","success");
+    }
+    setModal(null);
+    onRefresh();
+  };
+
+  // Programme completion stats
+  const totalSlots  = AUDIT_AREAS.length * 2;
+  const yearSlots   = schedule.filter(s=>s.year===year);
+  const completed   = yearSlots.filter(s=>s.status==="Completed").length;
+  const overdue     = yearSlots.filter(s=>s.status==="Overdue"||(!["Completed","Cancelled"].includes(s.status)&&s.planned_date&&new Date(s.planned_date)<new Date())).length;
+  const pct         = totalSlots>0 ? Math.round(completed/totalSlots*100) : 0;
+  const totalFindings = yearSlots.reduce((a,s)=>a+Number(s.findings||0),0);
+  const totalObs      = yearSlots.reduce((a,s)=>a+Number(s.observations||0),0);
+
+  const hasSchedule = yearSlots.length > 0;
+
+  return (
+    <div style={{ padding:24, maxWidth:1200, margin:"0 auto" }}>
+      {/* Header */}
+      <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:24,flexWrap:"wrap",gap:12 }}>
+        <div>
+          <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:22,color:T.primaryDk }}>Audit Management</div>
+          <div style={{ fontSize:13,color:T.muted,marginTop:2 }}>Annual audit programme, schedule and records</div>
+        </div>
+        <div style={{ display:"flex",gap:10,alignItems:"center",flexWrap:"wrap" }}>
+          {/* Year selector */}
+          <div style={{ display:"flex",alignItems:"center",gap:6,background:"#f5f8fc",borderRadius:8,padding:"4px 8px",border:"1px solid #dde3ea" }}>
+            <button onClick={()=>setYear(y=>y-1)} style={{ background:"none",border:"none",cursor:"pointer",color:T.primary,fontWeight:700,fontSize:16,padding:"0 4px" }}>‹</button>
+            <span style={{ fontWeight:700,fontSize:14,color:T.primaryDk,minWidth:36,textAlign:"center" }}>{year}</span>
+            <button onClick={()=>setYear(y=>y+1)} style={{ background:"none",border:"none",cursor:"pointer",color:T.primary,fontWeight:700,fontSize:16,padding:"0 4px" }}>›</button>
+          </div>
+          {/* View toggle */}
+          <div style={{ display:"flex",background:"#f5f8fc",borderRadius:8,border:"1px solid #dde3ea",overflow:"hidden" }}>
+            {[["schedule","📅 Schedule"],["list","📋 All Audits"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setView(v)} style={{ padding:"7px 14px",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:view===v?"#01579b":"transparent",color:view===v?"#fff":T.muted,transition:"all 0.2s" }}>{l}</button>
+            ))}
+          </div>
+          {isQM && hasSchedule && (
+            <Btn variant="ghost" onClick={()=>generateSchedulePDF(yearSlots, year, yearSlots[0]||{})}>
+              📥 Export Schedule PDF
+            </Btn>
+          )}
+          {isQM && (
+            <Btn onClick={handleGenerateClick} disabled={generating}>
+              {generating?"Generating...":"⚡ Generate "+year+" Schedule"}
+            </Btn>
+          )}
+        </div>
+      </div>
+
+      {/* Stats bar */}
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:24 }}>
+        {[
+          {label:"Programme Completion",value:`${pct}%`,sub:`${completed}/${totalSlots} audits`,color:pct===100?T.green:pct>50?T.yellow:T.red},
+          {label:"Completed",value:completed,sub:"This year",color:T.green},
+          {label:"Overdue",value:overdue,sub:"Past planned date",color:overdue>0?T.red:T.muted},
+          {label:"Total Findings",value:totalFindings,sub:`+ ${totalObs} observations`,color:totalFindings>0?T.yellow:T.green},
+        ].map(s=>(
+          <div key={s.label} style={{ background:"#fff",borderRadius:10,padding:"14px 18px",border:"1px solid #dde3ea",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>{s.label}</div>
+            <div style={{ fontSize:26,fontWeight:800,color:s.color,lineHeight:1 }}>{s.value}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ background:"#fff",borderRadius:10,padding:"14px 20px",border:"1px solid #dde3ea",marginBottom:24 }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+          <span style={{ fontSize:12,fontWeight:700,color:T.primaryDk }}>Annual Programme Progress — {year}</span>
+          <span style={{ fontSize:12,color:T.muted }}>{completed} of {totalSlots} audits completed</span>
+        </div>
+        <div style={{ height:10,background:"#eef2f7",borderRadius:5,overflow:"hidden" }}>
+          <div style={{ height:"100%",width:`${pct}%`,background:pct===100?"#2e7d32":pct>50?"#f57f17":"#01579b",borderRadius:5,transition:"width 0.5s" }}/>
+        </div>
+      </div>
+
+      {/* Schedule Grid View */}
+      {view==="schedule" && (
+        <div style={{ background:"#fff",borderRadius:12,border:"1px solid #dde3ea",overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
+          {!hasSchedule ? (
+            <div style={{ padding:60,textAlign:"center" }}>
+              <div style={{ fontSize:48,marginBottom:16 }}>📅</div>
+              <div style={{ fontSize:18,fontWeight:700,color:T.primaryDk,marginBottom:8 }}>No schedule for {year}</div>
+              <div style={{ fontSize:13,color:T.muted,marginBottom:24 }}>Generate the annual audit programme to populate the schedule</div>
+              {isQM&&<Btn onClick={handleGenerateClick} disabled={generating}>{generating?"Generating...":"⚡ Generate "+year+" Audit Schedule"}</Btn>}
+            </div>
+          ) : (
+            <table style={{ width:"100%",borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"#1a2332" }}>
+                  <th style={{ padding:"12px 16px",textAlign:"left",fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:0.5,width:200 }}>Audit Area</th>
+                  {MONTHS.map(m=>(
+                    <th key={m} style={{ padding:"8px 4px",textAlign:"center",fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:0.3 }}>{m}</th>
+                  ))}
+                  <th style={{ padding:"12px 16px",textAlign:"center",fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:0.5 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AUDIT_AREAS.map((area,ai)=>{
+                  const slot1 = getSlot(area,1);
+                  const slot2 = getSlot(area,2);
+                  const bothDone = slot1?.status==="Completed" && slot2?.status==="Completed";
+                  return (
+                    <tr key={area} style={{ borderBottom:"1px solid #eef2f7",background:ai%2===0?"#fff":"#fafbfc" }}>
+                      <td style={{ padding:"12px 16px",fontSize:13,fontWeight:600,color:T.primaryDk }}>
+                        {area}
+                      </td>
+                      {MONTHS.map((_,mi)=>{
+                        const monthNum = mi+1;
+                        const s1 = slot1?.month===monthNum ? slot1 : null;
+                        const s2 = slot2?.month===monthNum ? slot2 : null;
+                        const hasSlot = s1||s2;
+                        if(!hasSlot) return <td key={mi} style={{ padding:"8px 4px",textAlign:"center" }}><div style={{ width:8,height:8,borderRadius:"50%",background:"#eef2f7",margin:"0 auto" }}/></td>;
+                        const slot = s1||s2;
+                        const c = slotColor(slot);
+                        return (
+                          <td key={mi} style={{ padding:"4px",textAlign:"center" }}>
+                            <div
+                              onClick={()=>isQM&&setModal(slot)}
+                              title={`${area} — Slot ${slot.slot}
+Status: ${slot.status||"Scheduled"}
+Lead: ${slot.lead_auditor||"Not assigned"}
+Planned: ${slot.planned_date||"Not set"}`}
+                              style={{ width:28,height:28,borderRadius:6,background:c.bg,border:`2px solid ${c.border}`,margin:"0 auto",cursor:isQM?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:c.text,transition:"transform 0.15s" }}
+                              onMouseEnter={e=>{if(isQM)e.target.style.transform="scale(1.2)";}}
+                              onMouseLeave={e=>{e.target.style.transform="scale(1)";}}
+                            >
+                              {slot.status==="Completed"?"✓":slot.slot}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding:"8px 16px",textAlign:"center" }}>
+                        {bothDone
+                          ? <span style={{ fontSize:11,fontWeight:700,color:"#2e7d32",background:"#e8f5e9",padding:"3px 10px",borderRadius:12 }}>✓ Complete</span>
+                          : <span style={{ fontSize:11,fontWeight:600,color:T.muted,background:"#f5f8fc",padding:"3px 10px",borderRadius:12 }}>
+                              {[slot1,slot2].filter(s=>s?.status==="Completed").length}/2
+                            </span>
+                        }
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* List View — All individual audits */}
+      {view==="list" && (
+        <div style={{ background:"#fff",borderRadius:12,border:"1px solid #dde3ea",overflow:"hidden" }}>
+          <table style={{ width:"100%",borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ background:"#f5f8fc",borderBottom:"2px solid #dde3ea" }}>
+                {["Area","Slot","Month","Type","Lead Auditor","Planned Date","Actual Date","Findings","Obs","Status",""].map(h=>(
+                  <th key={h} style={{ padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {yearSlots.length===0
+                ? <tr><td colSpan={11} style={{ padding:40,textAlign:"center",color:T.muted,fontSize:13 }}>No audits scheduled for {year}</td></tr>
+                : yearSlots.sort((a,b)=>a.month-b.month||a.slot-b.slot).map((s,i)=>{
+                  const c = slotColor(s);
+                  return (
+                    <tr key={s.id} style={{ borderBottom:"1px solid #eef2f7",background:i%2===0?"#fff":"#fafbfc" }}>
+                      <td style={{ padding:"10px 14px",fontSize:13,fontWeight:600,color:T.primaryDk }}>{s.area}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.muted }}>#{s.slot}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{MONTHS[(s.month||1)-1]}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.audit_type||"Internal"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.lead_auditor||"—"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.planned_date||"—"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.actual_date||"—"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:Number(s.findings)>0?T.red:T.muted,fontWeight:Number(s.findings)>0?700:400 }}>{s.findings||0}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.muted }}>{s.observations||0}</td>
+                      <td style={{ padding:"10px 14px" }}>
+                        <span style={{ fontSize:11,fontWeight:700,color:c.text,background:c.bg,border:`1px solid ${c.border}`,padding:"3px 10px",borderRadius:12 }}>{s.status||"Scheduled"}</span>
+                      </td>
+                      <td style={{ padding:"10px 14px" }}>
+                        <div style={{ display:"flex",gap:6 }}>
+                          {isQM&&<Btn size="sm" variant="ghost" onClick={()=>setModal(s)}>Edit</Btn>}
+                          {s.status==="Completed"&&<Btn size="sm" variant="ghost" onClick={()=>generateAuditReport(s)}>📄 PDF</Btn>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              }
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Legend */}
+      {view==="schedule"&&hasSchedule&&(
+        <div style={{ display:"flex",gap:16,marginTop:16,flexWrap:"wrap" }}>
+          {[["Scheduled","#fff8e1","#ffe082","#f57f17"],["In Progress","#e3f2fd","#90caf9","#01579b"],["Completed","#e8f5e9","#a5d6a7","#2e7d32"],["Overdue","#ffebee","#ef9a9a","#c62828"],["Cancelled","#f5f5f5","#e0e0e0","#757575"]].map(([l,bg,border,text])=>(
+            <div key={l} style={{ display:"flex",alignItems:"center",gap:6 }}>
+              <div style={{ width:16,height:16,borderRadius:4,background:bg,border:`2px solid ${border}` }}/>
+              <span style={{ fontSize:11,color:T.muted,fontWeight:600 }}>{l}</span>
+            </div>
+          ))}
+          <div style={{ fontSize:11,color:T.muted,marginLeft:"auto" }}>Click a slot to edit · Numbers = slot 1 or 2 of biannual cycle</div>
+        </div>
+      )}
+
+      {modal&&<AuditScheduleModal slot={modal} onSave={saveSlot} onClose={()=>setModal(null)} managers={managers}/>}
+
+      {/* Password Gate Modal */}
+      {pwModal&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={()=>setPwModal(false)}>
+          <div style={{ background:"#fff",borderRadius:14,width:380,padding:32,boxShadow:"0 8px 50px rgba(0,0,0,0.3)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontSize:32,textAlign:"center",marginBottom:12 }}>🔐</div>
+            <div style={{ fontWeight:800,fontSize:18,color:"#1a2332",textAlign:"center",marginBottom:6 }}>Quality Manager Authorisation</div>
+            <div style={{ fontSize:13,color:"#5f7285",textAlign:"center",marginBottom:20 }}>Enter the QM password to generate or overwrite the {year} audit schedule</div>
+            <input
+              id="pw-input"
+              type="password"
+              placeholder="Enter password"
+              autoFocus
+              style={{ width:"100%",padding:"10px 12px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:14,boxSizing:"border-box",marginBottom:14 }}
+              onKeyDown={e=>{
+                if(e.key==="Enter"){
+                  if(e.target.value===SCHEDULE_PASSWORD){ setPwModal(false); setApprovalModal(true); e.target.value=""; }
+                  else { e.target.style.borderColor="#c62828"; setTimeout(()=>e.target.style.borderColor="#dde3ea",1000); }
+                }
+              }}
+            />
+            <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+              <Btn variant="ghost" onClick={()=>setPwModal(false)}>Cancel</Btn>
+              <Btn onClick={()=>{
+                const val=document.getElementById("pw-input").value;
+                if(val===SCHEDULE_PASSWORD){ setPwModal(false); setApprovalModal(true); document.getElementById("pw-input").value=""; }
+                else { document.getElementById("pw-input").style.borderColor="#c62828"; setTimeout(()=>document.getElementById("pw-input").style.borderColor="#dde3ea",1000); }
+              }}>Confirm</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {approvalModal&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={()=>setApprovalModal(false)}>
+          <div style={{ background:"#fff",borderRadius:14,width:480,padding:0,boxShadow:"0 8px 50px rgba(0,0,0,0.3)",overflow:"hidden" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ background:"linear-gradient(135deg,#01579b,#0277bd)",padding:"18px 24px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <div>
+                <div style={{ color:"rgba(255,255,255,0.7)",fontSize:11,textTransform:"uppercase",letterSpacing:1 }}>Programme Approval</div>
+                <div style={{ color:"#fff",fontWeight:700,fontSize:16 }}>Generate {year} Audit Schedule</div>
+              </div>
+              <button onClick={()=>setApprovalModal(false)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer" }}>✕</button>
+            </div>
+            <div style={{ padding:24,display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ padding:"10px 14px",background:"#fff3e0",borderRadius:8,fontSize:12,color:"#e65100",borderLeft:"4px solid #f57f17" }}>
+                ⚠️ This will generate {AUDIT_AREAS.length*2} audit slots for {year}. Existing slots will be overwritten.
+              </div>
+              <div style={{ fontSize:13,fontWeight:700,color:"#1a2332",borderBottom:"1px solid #eef2f7",paddingBottom:8 }}>Quality Manager</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Name</label>
+                  <input value={approval.qm_name} onChange={e=>setApproval(p=>({...p,qm_name:e.target.value}))} placeholder="Quality Manager full name" style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Date</label>
+                  <input type="date" value={approval.qm_date} onChange={e=>setApproval(p=>({...p,qm_date:e.target.value}))} style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+              </div>
+              <div style={{ fontSize:13,fontWeight:700,color:"#1a2332",borderBottom:"1px solid #eef2f7",paddingBottom:8,marginTop:4 }}>Accountable Manager</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Name</label>
+                  <input value={approval.am_name} onChange={e=>setApproval(p=>({...p,am_name:e.target.value}))} placeholder="Accountable Manager full name" style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Date</label>
+                  <input type="date" value={approval.am_date} onChange={e=>setApproval(p=>({...p,am_date:e.target.value}))} style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+              </div>
+              <div style={{ display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid #eef2f7" }}>
+                <Btn variant="ghost" onClick={()=>setApprovalModal(false)}>Cancel</Btn>
+                <Btn onClick={generateSchedule} disabled={generating}>{generating?"Generating...":"⚡ Generate Schedule"}</Btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── TABS ─────────────────────────────────────────────────────
+const TABS = [
+  {id:"dashboard",    label:"Dashboard",       icon:"▦",  group:"main"},
+  {id:"cars",         label:"CARs",            icon:"📋", group:"main"},
+  {id:"documents",    label:"Documents",       icon:"📄", group:"main"},
+  {id:"flightdocs",   label:"Flight School Docs",icon:"🏫",group:"main"},
+  {id:"audits",       label:"Audits",          icon:"🔍", group:"main"},
+  {id:"contractors",  label:"Contractors",     icon:"🔧", group:"main"},
+  {id:"risks",        label:"Risk Register",   icon:"⚠️", group:"main"},
+  {id:"managers",     label:"Managers",        icon:"👥", group:"settings"},
+  {id:"changelog",    label:"Change Log",      icon:"📋", group:"settings"},
+  {id:"about",        label:"About",           icon:"(i)", group:"settings"},
+];
+
+// ─── Main App ─────────────────────────────────────────────────
+export default function App() {
+  const [user,setUser]         = useState(null);
+  const [profile,setProfile]   = useState(null);
+  const [managers,setManagers] = useState([]);
+  const [data,setData]         = useState({cars:[],caps:[],verifications:[],documents:[],flightDocs:[],audits:[],contractors:[],changeLog:[],risks:[],auditSchedule:[]});
+  const [activeTab,setTab]     = useState("dashboard");
+  const [toast,setToast]       = useState(null);
+  const [loading,setLoading]   = useState(true);
+  const subs                   = useRef([]);
+  const dataLoaded              = useRef(false);
+
+  const showToast = useCallback((msg,type="success")=>setToast({message:msg,type}),[]);
+
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data:{session}})=>{
+      if(session?.user)setUser(session.user); else setLoading(false);
+    });
+    const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
+      setUser(session?.user||null); if(!session?.user){setLoading(false);setProfile(null);}
+    });
+    return()=>subscription.unsubscribe();
+  },[]);
+
+  const loadAll = useCallback(async()=>{
+    if(!user)return;
+    const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof,risks,auditSchedule]=await Promise.all([
+      supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
+      supabase.from(TABLES.caps).select("*"),
+      supabase.from(TABLES.verifications).select("*"),
+      supabase.from(TABLES.documents).select("*").order("created_at",{ascending:false}),
+      supabase.from(TABLES.flightDocs).select("*").order("expiry_date",{ascending:true}),
+      supabase.from(TABLES.audits).select("*").order("date",{ascending:true}),
+      supabase.from(TABLES.contractors).select("*").order("name",{ascending:true}),
+      supabase.from(TABLES.changeLog).select("*").order("created_at",{ascending:false}).limit(200),
+      supabase.from(TABLES.managers).select("*").order("id"),
+      supabase.from(TABLES.profiles).select("*").eq("id",user.id).single(),
+      supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
+      supabase.from("audit_schedule").select("*").order("year",{ascending:false}),
+    ]);
+    // Auto-mark overdue CARs — any non-closed CAR past due date becomes Overdue
+    const OVERDUE_ELIGIBLE = ["Open","In Progress"];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const processedCars = (cars.data||[]).map(c => {
+      if(!OVERDUE_ELIGIBLE.includes(c.status)) return c; // only Open/In Progress can become Overdue
+      if(!c.due_date) return c;
+      const due = new Date(c.due_date); due.setHours(0,0,0,0);
+      if(due < today) {
+        supabase.from(TABLES.cars).update({status:"Overdue",updated_at:new Date().toISOString()}).eq("id",c.id).then(()=>{});
+        return {...c, status:"Overdue"};
+      }
+      return c;
+    });
+
+    // Batch all state updates together to prevent intermediate empty renders
+    flushSync(()=>{
+      setData({
+        cars:processedCars,caps:caps.data||[],verifications:verifs.data||[],auditSchedule:auditSchedule.data||[],
+        documents:docs.data||[],flightDocs:fdocs.data||[],audits:audits.data||[],
+        contractors:contractors.data||[],changeLog:logs.data||[],
+        risks:risks.data||[],
+      });
+      setManagers(mgrs.data||[]);
+      setProfile(prof.data);
+      setLoading(false);
+    });
+  },[user]);
+
+  useEffect(()=>{ loadAll(); },[loadAll]);
+
+  useEffect(()=>{
+    if(!user||loading)return;
+    const tables=["cars","caps","capa_verifications","documents","flight_school_docs","audits","contractors","change_log","risk_register","audit_schedule"];
+    subs.current=tables.map(t=>
+      supabase.channel(`rt-${t}`).on("postgres_changes",{event:"*",schema:"public",table:t},()=>loadAll()).subscribe()
+    );
+    return()=>{subs.current.forEach(s=>s.unsubscribe());};
+  },[user,loading,loadAll]);
+
+  const isAdmin  = profile?.role==="admin";
+  const isQM     = ["admin","quality_manager"].includes(profile?.role);
+  const canEdit  = ["admin","quality_manager","quality_auditor","manager"].includes(profile?.role);
+
+  const alertItems = [
+    ...data.cars.filter(c=>!["Closed","Completed"].includes(c.status)&&(isOverdue(c.due_date)||isApproaching(c.due_date))).map(c=>({id:c.id,due:c.due_date})),
+    ...data.flightDocs.filter(d=>!["Expired","Approved"].includes(d.status)&&(isOverdue(d.expiry_date)||isApproaching(d.expiry_date))).map(d=>({id:d.id,due:d.expiry_date})),
+    ...data.audits.filter(a=>a.status==="Scheduled"&&isOverdue(a.date)).map(a=>({id:a.id,due:a.date})),
+    ...(data.risks||[]).filter(r=>!["Closed","Monitoring"].includes(r.status)&&isOverdue(r.target_date)).map(r=>({id:r.id,due:r.target_date})),
+  ];
+
+  const counts = {
+    cars:      data.cars.filter(c=>["Open","In Progress"].includes(c.status)).length,
+    flightdocs:data.flightDocs.filter(d=>!["Expired","Approved"].includes(d.status)&&(isApproaching(d.expiry_date)||isOverdue(d.expiry_date))).length,
+    audits:    data.audits.filter(a=>a.status==="Scheduled"&&isOverdue(a.date)).length,
+  };
+
+  if(!user) return <LoginScreen onLogin={setUser}/>;
+  if(loading) return (
+    <div style={{ height:"100vh", background:"#eef2f7", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14 }}>
+      <GlobalStyle/>
+      <div style={{ fontFamily:"'Oxanium',sans-serif", fontSize:28, fontWeight:800, color:T.primary }}>AeroQualify Pro</div>
+      <div style={{ color:T.muted, fontSize:13 }}>Connecting to database…</div>
+      <div style={{ width:32, height:32, border:`3px solid ${T.border}`, borderTop:`3px solid ${T.primary}`, borderRadius:"50%", animation:"spin 1s linear infinite" }} />
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex", height:"100vh", background:T.bg, overflow:"hidden" }}>
+      <GlobalStyle/>
+      {/* Top stripe */}
+      <div style={{ position:"fixed", top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${T.primary},${T.sky},${T.teal})`, zIndex:200 }} />
+
+      {/* ── Sidebar ──────────────────────────────── */}
+      <aside style={{ width:220, flexShrink:0, background:"#fff", borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", marginTop:3, boxShadow:"2px 0 8px rgba(0,0,0,0.04)" }}>
+        {/* Logo */}
+        <div style={{ padding:"20px 16px 16px", borderBottom:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:36,height:36,borderRadius:9,background:`linear-gradient(135deg,${T.primary},${T.sky})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,boxShadow:"0 2px 8px rgba(1,87,155,0.25)" }}>✈</div>
+            <div>
+              <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:17, color:T.primaryDk, lineHeight:1 }}>AeroQualify</div>
+              <div style={{ fontSize:9, color:T.muted, letterSpacing:1.5, textTransform:"uppercase" }}>Pro · QMS</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav style={{ flex:1, padding:"10px 8px", overflowY:"auto" }}>
+          <div style={{ fontSize:9, color:T.light, fontWeight:700, letterSpacing:1.5, textTransform:"uppercase", padding:"6px 8px 4px", marginBottom:2 }}>Main</div>
+          {TABS.filter(t=>t.group==="main").map(t=>{
+            const cnt=counts[t.id]; const active=activeTab===t.id;
+            return (
+              <button key={t.id} className={`nav-item${active?" active":""}`} onClick={()=>setTab(t.id)}
+                style={{ width:"100%",textAlign:"left",background:"transparent",border:"none",borderLeft:"3px solid transparent",borderRadius:"0 7px 7px 0",padding:"9px 12px",color:active?T.primary:T.muted,fontWeight:active?600:400,fontSize:13,display:"flex",alignItems:"center",gap:9,marginBottom:1,transition:"all 0.15s" }}>
+                <span style={{ fontSize:15,width:20,textAlign:"center" }}>{t.icon}</span>
+                <span style={{ flex:1 }}>{t.label}</span>
+                {cnt?<span style={{ background:T.red,color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:700 }}>{cnt}</span>:null}
+              </button>
+            );
+          })}
+          <div style={{ fontSize:9, color:T.light, fontWeight:700, letterSpacing:1.5, textTransform:"uppercase", padding:"14px 8px 4px", marginBottom:2 }}>Settings</div>
+          {TABS.filter(t=>t.group==="settings").map(t=>{
+            const active=activeTab===t.id;
+            return (
+              <button key={t.id} className={`nav-item${active?" active":""}`} onClick={()=>setTab(t.id)}
+                style={{ width:"100%",textAlign:"left",background:"transparent",border:"none",borderLeft:"3px solid transparent",borderRadius:"0 7px 7px 0",padding:"9px 12px",color:active?T.primary:T.muted,fontWeight:active?600:400,fontSize:13,display:"flex",alignItems:"center",gap:9,marginBottom:1,transition:"all 0.15s" }}>
+                <span style={{ fontSize:15,width:20,textAlign:"center" }}>{t.icon}</span>
+                <span style={{ flex:1 }}>{t.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User */}
+        <div style={{ padding:"12px 14px", borderTop:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex",alignItems:"center",gap:9,marginBottom:10 }}>
+            <div style={{ width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${T.primary},${T.sky})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",flexShrink:0 }}>
+              {(profile?.full_name||user.email)[0].toUpperCase()}
+            </div>
+            <div style={{ flex:1,overflow:"hidden" }}>
+              <div style={{ fontSize:12,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{profile?.full_name||user.email}</div>
+              <div style={{ marginTop:2 }}><Badge label={profile?.role||"viewer"}/></div>
+            </div>
+          </div>
+          <Btn variant="ghost" size="sm" onClick={()=>supabase.auth.signOut()} style={{ width:"100%",textAlign:"center" }}>Sign Out</Btn>
+          <div style={{ fontSize:10,color:T.green,marginTop:8,display:"flex",alignItems:"center",gap:5 }}>
+            <span style={{ width:6,height:6,borderRadius:"50%",background:T.green,display:"inline-block",animation:"pulse 2s infinite" }}/>
+            Live sync active
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Main ─────────────────────────────────── */}
+      <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden",marginTop:3 }}>
+        <AlertBanner items={alertItems}/>
+
+        {/* Header */}
+        <header style={{ background:"#fff",borderBottom:`1px solid ${T.border}`,padding:"12px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+          <div>
+            <div style={{ fontFamily:"'Oxanium',sans-serif",fontSize:20,fontWeight:700,color:T.primaryDk }}>
+              {TABS.find(t=>t.id===activeTab)?.label}
+            </div>
+            <div style={{ fontSize:11,color:T.muted }}>{new Date().toLocaleDateString("en-GB",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+            <div style={{ fontSize:11,color:T.muted,textAlign:"right" }}>
+              <div>{profile?.role?.replace("_"," ").replace(/\b\w/g,l=>l.toUpperCase())}</div>
+              <div style={{ color:T.light }}>AS9100D · ISO 9001:2015</div>
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div style={{ flex:1,overflowY:"auto",padding:24 }}>
+          {activeTab==="dashboard" && <Dashboard data={data}/>}
+          {activeTab==="cars" && <CARsView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="documents" && <GenericPage title="Documents" subtitle="QMS documents with revision control" table="documents" columns={DOC_COLS} modalFields={DOC_FIELDS} modalTitle="Document" modalDefaults={{status:"Draft",rev:"Rev 1",date:today()}} data={data} canEdit={canEdit} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="flightdocs" && <GenericPage title="Flight School Documents" subtitle="Approvals, certificates and regulatory documents" table="flight_school_docs" columns={FLIGHT_DOC_COLS} modalFields={FLIGHT_DOC_FIELDS} modalTitle="Flight School Document" modalDefaults={{status:"Valid",issue_date:today()}} data={{flight_school_docs:data.flightDocs}} canEdit={isQM} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="audits" && <AuditsView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="contractors" && <GenericPage title="Contractors" subtitle="Approved contractor register" table="contractors" columns={CONTRACTOR_COLS} modalFields={CONTRACTOR_FIELDS} modalTitle="Contractor" modalDefaults={{status:"Approved",rating:"A"}} data={data} canEdit={isAdmin} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="risks"    && <RiskRegisterView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="managers" && <ManagersPage managers={managers} onRefresh={loadAll} showToast={showToast} isAdmin={isAdmin}/>}
+          {activeTab==="changelog" && <ChangeLogView logs={data.changeLog}/>}
+          {activeTab==="about"     && <AboutView />}
+        </div>
+      </div>
+
+      {toast&&<Toast message={toast.message} type={toast.type} onDone={()=>setToast(null)}/>}
+    </div>
+  );
+}ily=Oxanium:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet" />
     <style>{`
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html, body, #root { height: 100%; }
