@@ -2434,9 +2434,17 @@ const RiskRegisterView = ({ data, user, profile, managers, onRefresh, showToast 
 
 // ─── Annual Audit Schedule Builder ────────────────────────────
 const AUDIT_AREAS = [
-  "Management Personnel","Instructor Records","Aircraft Documentation",
-  "AMO Oversight","Safety Systems","Ground Operations",
-  "Training Records","Flight Operations","Fuel Supplier Oversight",
+  "Management Personnel Records",
+  "Ground and Flight Instructor Records",
+  "Ground School Training Records",
+  "Flight Training Records",
+  "Company Manuals and Relevant Documents",
+  "Classrooms and Facilities",
+  "Aircraft",
+  "AMO",
+  "Fuel Supplier",
+  "Safety Management Systems",
+  "Quality Management Systems",
 ];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const AUDIT_TYPES = ["Internal","Supplier","External","Regulatory","Surveillance"];
