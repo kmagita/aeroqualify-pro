@@ -2676,9 +2676,10 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
         </div>
 
         {/* Footer */}
-        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",padding:"16px 24px",borderTop:"1px solid #eef2f7",background:"#fafbfc",flexShrink:0 }}>
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",padding:"16px 24px",borderTop:"1px solid #eef2f7",background:"#fafbfc",flexShrink:0,flexWrap:"wrap" }}>
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          {slot.status==="Completed"&&<Btn variant="ghost" onClick={()=>generateAuditReport({...slot,...form,finding_items:JSON.stringify(findingItems)})}>📄 Export PDF</Btn>}
+          <Btn variant="ghost" onClick={()=>generateNotificationPDF({...slot,...form})}>🔔 Notification Form</Btn>
+          {slot.status==="Completed"&&<Btn variant="ghost" onClick={()=>generateAuditReport({...slot,...form,finding_items:JSON.stringify(findingItems)})}>📄 Audit Report PDF</Btn>}
           <Btn onClick={handleSave}>💾 Save Audit Record</Btn>
         </div>
       </div>
@@ -2873,60 +2874,309 @@ const generateAuditReport = async (slot) => {
 };
 
 
+const SCHEDULE_PASSWORD = "QM2024!";
+
+// ── Schedule PDF export ────────────────────────────────────────
+const generateSchedulePDF = async (yearSlots, year, approval) => {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
+  const W=297; const H=210; const M=12; const col=W-M*2;
+  const addFooter = () => {
+    const pages = doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,H-8,W-M,H-8);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+      doc.text("Pegasus Flyers (E.A.) Ltd. · QMS Annual Audit Programme · CONTROLLED DOCUMENT", M, H-4);
+      doc.text(`Page ${i} of ${pages}`, W-M, H-4, {align:"right"});
+    }
+  };
+
+  // Header
+  doc.setFillColor(26,35,50); doc.rect(0,0,W,22,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
+  doc.text("AeroQualify Pro", M, 10);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,185,210);
+  doc.text(`ANNUAL AUDIT PROGRAMME — ${year}`, M, 17);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(160,185,210);
+  doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi", W-M, 10, {align:"right"});
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`, W-M, 17, {align:"right"});
+
+  let y = 28;
+  // Column widths
+  const areaW = 52; const monthW = (col - areaW - 22) / 12; const statusW = 22;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // Table header
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,8,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
+  doc.text("AUDIT AREA", M+2, y+5.2);
+  months.forEach((m,i) => doc.text(m, M+areaW+i*monthW+monthW/2, y+5.2, {align:"center"}));
+  doc.text("STATUS", M+areaW+12*monthW+statusW/2, y+5.2, {align:"center"});
+  y += 8;
+
+  // Rows
+  AUDIT_AREAS.forEach((area, ai) => {
+    const rowH = 10;
+    doc.setFillColor(ai%2===0?255:248,ai%2===0?255:250,ai%2===0?255:252);
+    doc.rect(M,y,col,rowH,"F");
+    doc.setDrawColor(221,227,234); doc.setLineWidth(0.2); doc.rect(M,y,col,rowH,"S");
+    doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(26,35,50);
+    doc.text(area, M+2, y+6.5);
+
+    const slot1 = yearSlots.find(s=>s.area===area&&s.slot===1);
+    const slot2 = yearSlots.find(s=>s.area===area&&s.slot===2);
+
+    months.forEach((_,mi) => {
+      const cx = M+areaW+mi*monthW+monthW/2;
+      const s1 = slot1?.month===mi+1 ? slot1 : null;
+      const s2 = slot2?.month===mi+1 ? slot2 : null;
+      const slot = s1||s2;
+      if(slot){
+        const colors = {
+          Completed:[46,125,50], "In Progress":[1,87,155],
+          Scheduled:[245,127,23], Overdue:[198,40,40], Cancelled:[117,117,117]
+        };
+        const c = colors[slot.status]||[245,127,23];
+        doc.setFillColor(...c);
+        doc.roundedRect(cx-4,y+2,8,6,1,1,"F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(5.5); doc.setTextColor(255,255,255);
+        doc.text(String(slot.slot), cx, y+6.2, {align:"center"});
+      }
+    });
+
+    // Status
+    const done = [slot1,slot2].filter(s=>s?.status==="Completed").length;
+    const statusText = done===2?"Complete":`${done}/2`;
+    const statusColor = done===2?[46,125,50]:[245,127,23];
+    doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(...statusColor);
+    doc.text(statusText, M+areaW+12*monthW+statusW/2, y+6.5, {align:"center"});
+    y += rowH;
+  });
+
+  // Legend
+  y += 6;
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(95,114,133);
+  doc.text("LEGEND:", M, y);
+  [["Scheduled",[245,127,23]],["In Progress",[1,87,155]],["Completed",[46,125,50]],["Overdue",[198,40,40]],["Cancelled",[117,117,117]]].forEach(([l,c],i) => {
+    const bx = M+22+i*32;
+    doc.setFillColor(...c); doc.roundedRect(bx,y-4,8,5,1,1,"F");
+    doc.setTextColor(95,114,133); doc.setFont("helvetica","normal");
+    doc.text(l, bx+10, y);
+  });
+
+  // Approval section
+  y += 12;
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,36,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,36,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("PROGRAMME APPROVAL", M+3, y+6);
+  const sigW = (col-6)/2;
+  [
+    ["Generated By — Quality Manager", approval?.qm_name||"", approval?.qm_date||""],
+    ["Approved By — Accountable Manager", approval?.am_name||"", approval?.am_date||""],
+  ].forEach(([label, name, date], i) => {
+    const bx = M+3+i*(sigW+3);
+    doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), bx, y+13);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+    doc.text(name||"________________________________", bx, y+21);
+    doc.setFontSize(7); doc.setTextColor(95,114,133);
+    doc.text(`Date: ${date||"________________"}`, bx, y+28);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
+    doc.line(bx, y+32, bx+sigW-6, y+32);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180);
+    doc.text("Signature", bx, y+35.5);
+  });
+
+  addFooter();
+  doc.save(`Audit-Programme-${year}.pdf`);
+};
+
+// ── Audit Notification PDF ─────────────────────────────────────
+const generateNotificationPDF = async (slot) => {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const W=210; const M=14; const col=W-M*2;
+
+  // Header
+  doc.setFillColor(26,35,50); doc.rect(0,0,W,28,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(255,255,255);
+  doc.text("AeroQualify Pro", M, 11);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,185,210);
+  doc.text("AUDIT NOTIFICATION FORM — QMS 002", M, 17);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(160,185,210);
+  doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi  |  +254206001467/8", W-M, 11, {align:"right"});
+  doc.text(`Issued: ${new Date().toLocaleDateString("en-GB")}`, W-M, 17, {align:"right"});
+
+  let y = 34;
+
+  // Ref number bar
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,10,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(255,255,255);
+  const notifRef = `ANF-${slot.year}-${String(slot.month).padStart(2,"0")}-${String(slot.slot).padStart(2,"0")}`;
+  doc.text(`Notification Reference: ${notifRef}`, M+3, y+6.5);
+  doc.text(`${slot.area}`, W-M-3, y+6.5, {align:"right"});
+  y += 14;
+
+  const box = (label, value, x, bY, w, h) => {
+    doc.setFillColor(245,248,252); doc.rect(x,bY,w,h,"F");
+    doc.setDrawColor(221,227,234); doc.rect(x,bY,w,h,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), x+2.5, bY+4);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    const lines = doc.splitTextToSize(String(value||"—"), w-5);
+    doc.text(lines, x+2.5, bY+9);
+    return bY+h+2;
+  };
+
+  const hw = (col-2)/2;
+  // Row 1
+  box("Audit Area", slot.area, M, y, col, 14); y+=16;
+  doc.setFillColor(245,248,252); doc.rect(M,y,hw,14,"F"); doc.setDrawColor(221,227,234); doc.rect(M,y,hw,14,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("AUDIT TYPE", M+2.5,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.audit_type||"Internal", M+2.5,y+9);
+  doc.setFillColor(245,248,252); doc.rect(M+hw+2,y,hw,14,"F"); doc.rect(M+hw+2,y,hw,14,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("AUDIT REF / SLOT", M+hw+4.5,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(`${slot.year} — Slot #${slot.slot}`, M+hw+4.5,y+9);
+  y+=16;
+  doc.setFillColor(245,248,252); doc.rect(M,y,hw,14,"F"); doc.rect(M,y,hw,14,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("PLANNED DATE", M+2.5,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.planned_date||"TBC", M+2.5,y+9);
+  doc.setFillColor(245,248,252); doc.rect(M+hw+2,y,hw,14,"F"); doc.rect(M+hw+2,y,hw,14,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("LEAD AUDITOR", M+hw+4.5,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.lead_auditor||"TBC", M+hw+4.5,y+9);
+  y+=16;
+  doc.setFillColor(245,248,252); doc.rect(M,y,hw,14,"F"); doc.rect(M,y,hw,14,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("OPENING BRIEF", M+2.5,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.opening_brief||"TBC", M+2.5,y+9);
+  doc.setFillColor(245,248,252); doc.rect(M+hw+2,y,hw,14,"F"); doc.rect(M+hw+2,y,hw,14,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("CLOSING BRIEF", M+hw+4.5,y+4);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.closing_brief||"TBC", M+hw+4.5,y+9);
+  y+=16;
+  box("Audit Criteria / Reference Documents", slot.audit_criteria||"AS9100D / KCAA ANO / Quality Manual", M, y, col, 14); y+=16;
+  box("Scope of Audit", slot.notes||"As per Annual Audit Programme", M, y, col, 20); y+=22;
+
+  // Notice text
+  doc.setFillColor(227,242,253); doc.rect(M,y,col,18,"F");
+  doc.setDrawColor(144,202,249); doc.rect(M,y,col,18,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(1,87,155);
+  doc.text("NOTICE TO AUDITEE", M+3, y+5.5);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  const notice = "This notification is issued at least 7 days prior to the scheduled audit date in accordance with the Quality Manual. Please ensure all relevant records, documentation and personnel are available on the date of audit. Your cooperation is required and expected.";
+  const noticeLines = doc.splitTextToSize(notice, col-6);
+  doc.text(noticeLines, M+3, y+10);
+  y+=22;
+
+  // Acknowledgement section
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,48,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,48,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("ACKNOWLEDGEMENT", M+3, y+7);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("Please sign below to confirm receipt of this audit notification.", M+3, y+13);
+  // Accept / Reject checkboxes
+  doc.setDrawColor(26,35,50); doc.setLineWidth(0.4);
+  doc.rect(M+3, y+18, 5, 5, "S"); doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.text("Accept — I confirm I have received this notification and will make required resources available.", M+10, y+22);
+  doc.rect(M+3, y+26, 5, 5, "S"); doc.text("Reject — I am unable to accommodate this audit. Reason:", M+10, y+30);
+  doc.setDrawColor(170,190,210); doc.line(M+80, y+30, M+col-3, y+30);
+  // Sig line
+  const sigW2 = (col-6)/2;
+  [["Auditee Signature & Name",""],["Date",""]].forEach(([l],i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+44, bx+sigW2-3, y+44);
+    doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(140,160,180);
+    doc.text(l, bx, y+47.5);
+  });
+  y+=52;
+
+  // Issued by
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,28,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,28,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("ISSUED BY — QUALITY MANAGER", M+3, y+7);
+  [["Quality Manager Name",""],["Date Issued",new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+    doc.text(v, bx, y+15);
+    doc.setDrawColor(170,190,210); doc.line(bx, y+22, bx+sigW2-3, y+22);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+25.5);
+  });
+
+  // Footer
+  doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,285,W-M,285);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+  doc.text(`Pegasus Flyers (E.A.) Ltd. · QMS 002 · Audit Notification · Ref: ${notifRef}`, M, 289);
+  doc.text("CONTROLLED DOCUMENT", W-M, 289, {align:"right"});
+
+  doc.save(`Audit-Notification-${notifRef}.pdf`);
+};
+
 const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
   const isQM    = ["admin","quality_manager"].includes(profile?.role);
   const isAdmin = profile?.role==="admin";
-  const [view,  setView]  = useState("schedule"); // "schedule" | "list"
-  const [year,  setYear]  = useState(new Date().getFullYear());
-  const [modal, setModal] = useState(null); // slot object
+  const [view,      setView]      = useState("schedule");
+  const [year,      setYear]      = useState(new Date().getFullYear());
+  const [modal,     setModal]     = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [pwModal,   setPwModal]   = useState(false);    // password gate
+  const [approvalModal, setApprovalModal] = useState(false); // approval fields before generate
+  const [approval,  setApproval]  = useState({ qm_name:"", qm_date:"", am_name:"", am_date:"" });
 
   const schedule = data.auditSchedule||[];
 
-  // Get slot for a given area + slot number (1 or 2) for current year
   const getSlot = (area, slotNum) =>
     schedule.find(s=>s.area===area && s.slot===slotNum && s.year===year);
 
-  // Status colour
   const slotColor = (slot) => {
     if(!slot) return { bg:"#f5f8fc", border:"#dde3ea", text:"#8fa8c0", label:"Not Set" };
     const s = slot.status;
-    if(s==="Completed")  return { bg:"#e8f5e9", border:"#a5d6a7", text:"#2e7d32", label:"Completed" };
+    if(s==="Completed")   return { bg:"#e8f5e9", border:"#a5d6a7", text:"#2e7d32", label:"Completed" };
     if(s==="In Progress") return { bg:"#e3f2fd", border:"#90caf9", text:"#01579b", label:"In Progress" };
-    if(s==="Overdue")    return { bg:"#ffebee", border:"#ef9a9a", text:"#c62828", label:"Overdue" };
-    if(s==="Cancelled")  return { bg:"#f5f5f5", border:"#e0e0e0", text:"#757575", label:"Cancelled" };
+    if(s==="Overdue")     return { bg:"#ffebee", border:"#ef9a9a", text:"#c62828", label:"Overdue" };
+    if(s==="Cancelled")   return { bg:"#f5f5f5", border:"#e0e0e0", text:"#757575", label:"Cancelled" };
     return { bg:"#fff8e1", border:"#ffe082", text:"#f57f17", label:"Scheduled" };
   };
 
-  // Generate annual schedule for a year
+  // Password gate → approval modal → generate
+  const handleGenerateClick = () => setPwModal(true);
+
   const generateSchedule = async () => {
     setGenerating(true);
     try {
-      // Spread 9 areas across 12 months — slot 1 in H1 (months 1-6), slot 2 in H2 (months 7-12)
       const rows = [];
       AUDIT_AREAS.forEach((area, idx) => {
-        const month1 = 1 + (idx % 6);   // spread across Jan-Jun
-        const month2 = 7 + (idx % 6);   // spread across Jul-Dec
-        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-1`, year, area, slot:1, month:month1, status:"Scheduled", findings:0, observations:0 });
-        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-2`, year, area, slot:2, month:month2, status:"Scheduled", findings:0, observations:0 });
+        const month1 = 1 + (idx % 6);
+        const month2 = 7 + (idx % 6);
+        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-1`, year, area, slot:1, month:month1, status:"Scheduled", findings:0, observations:0, qm_name:approval.qm_name, qm_date:approval.qm_date, am_name:approval.am_name, am_date:approval.am_date });
+        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-2`, year, area, slot:2, month:month2, status:"Scheduled", findings:0, observations:0, qm_name:approval.qm_name, qm_date:approval.qm_date, am_name:approval.am_name, am_date:approval.am_date });
       });
       const { error } = await supabase.from("audit_schedule").upsert(rows, { onConflict:"id" });
       if(error) { showToast(`Error: ${error.message}`,"error"); return; }
       showToast(`${year} audit schedule generated — ${rows.length} slots created`,"success");
+      setApprovalModal(false);
       onRefresh();
     } catch(e) { showToast(`Error: ${e.message}`,"error"); }
     finally { setGenerating(false); }
   };
 
-  // Save a slot
+  // Save a slot + send notification email
   const saveSlot = async (slot) => {
-    const { id, area, slotNum, year:y, month, ...rest } = slot;
-    const payload = { id: slot.id||`AS-${y}-${area?.replace(/\s+/g,"-")}-${slot.slot}`, year:y||year, area, slot:slot.slot, month, ...rest };
+    const payload = { id: slot.id||`AS-${slot.year||year}-${slot.area?.replace(/\s+/g,"-")}-${slot.slot}`, year:slot.year||year, area:slot.area, slot:slot.slot, month:slot.month, ...slot };
     const { error } = await supabase.from("audit_schedule").upsert(payload, { onConflict:"id" });
     if(error) { showToast(`Error: ${error.message}`,"error"); return; }
 
-    // If completed with findings, prompt to raise CARs
-    if(slot.status==="Completed" && Number(slot.findings)>0) {
+    // Send notification emails when a slot has a planned date and lead auditor set
+    if(slot.planned_date && slot.lead_auditor) {
+      const am = managers.find(m=>m.role_title==="Accountable Manager");
+      const rm = managers.find(m=>m.role_title===slot.auditee) || managers.find(m=>m.role_title==="Quality Manager");
+      const recipients = [rm?.email, am?.email].filter(Boolean);
+      if(recipients.length>0){
+        await sendNotification({ type:"audit_scheduled", record:slot, recipients });
+      }
+    }
+
+    if(slot.status==="Completed" && Number(slot.findings)>0){
       showToast(`Audit saved — ${slot.findings} finding(s) recorded. Raise CARs from the CAPA module.`,"success");
     } else {
       showToast("Audit slot saved","success");
@@ -2967,8 +3217,13 @@ const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => 
               <button key={v} onClick={()=>setView(v)} style={{ padding:"7px 14px",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:view===v?"#01579b":"transparent",color:view===v?"#fff":T.muted,transition:"all 0.2s" }}>{l}</button>
             ))}
           </div>
+          {isQM && hasSchedule && (
+            <Btn variant="ghost" onClick={()=>generateSchedulePDF(yearSlots, year, yearSlots[0]||{})}>
+              📥 Export Schedule PDF
+            </Btn>
+          )}
           {isQM && (
-            <Btn onClick={generateSchedule} disabled={generating}>
+            <Btn onClick={handleGenerateClick} disabled={generating}>
               {generating?"Generating...":"⚡ Generate "+year+" Schedule"}
             </Btn>
           )}
@@ -3010,7 +3265,7 @@ const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => 
               <div style={{ fontSize:48,marginBottom:16 }}>📅</div>
               <div style={{ fontSize:18,fontWeight:700,color:T.primaryDk,marginBottom:8 }}>No schedule for {year}</div>
               <div style={{ fontSize:13,color:T.muted,marginBottom:24 }}>Generate the annual audit programme to populate the schedule</div>
-              {isQM&&<Btn onClick={generateSchedule} disabled={generating}>{generating?"Generating...":"⚡ Generate "+year+" Audit Schedule"}</Btn>}
+              {isQM&&<Btn onClick={handleGenerateClick} disabled={generating}>{generating?"Generating...":"⚡ Generate "+year+" Audit Schedule"}</Btn>}
             </div>
           ) : (
             <table style={{ width:"100%",borderCollapse:"collapse" }}>
@@ -3134,6 +3389,84 @@ Planned: ${slot.planned_date||"Not set"}`}
       )}
 
       {modal&&<AuditScheduleModal slot={modal} onSave={saveSlot} onClose={()=>setModal(null)} managers={managers}/>}
+
+      {/* Password Gate Modal */}
+      {pwModal&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={()=>setPwModal(false)}>
+          <div style={{ background:"#fff",borderRadius:14,width:380,padding:32,boxShadow:"0 8px 50px rgba(0,0,0,0.3)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontSize:32,textAlign:"center",marginBottom:12 }}>🔐</div>
+            <div style={{ fontWeight:800,fontSize:18,color:"#1a2332",textAlign:"center",marginBottom:6 }}>Quality Manager Authorisation</div>
+            <div style={{ fontSize:13,color:"#5f7285",textAlign:"center",marginBottom:20 }}>Enter the QM password to generate or overwrite the {year} audit schedule</div>
+            <input
+              id="pw-input"
+              type="password"
+              placeholder="Enter password"
+              autoFocus
+              style={{ width:"100%",padding:"10px 12px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:14,boxSizing:"border-box",marginBottom:14 }}
+              onKeyDown={e=>{
+                if(e.key==="Enter"){
+                  if(e.target.value===SCHEDULE_PASSWORD){ setPwModal(false); setApprovalModal(true); e.target.value=""; }
+                  else { e.target.style.borderColor="#c62828"; setTimeout(()=>e.target.style.borderColor="#dde3ea",1000); }
+                }
+              }}
+            />
+            <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+              <Btn variant="ghost" onClick={()=>setPwModal(false)}>Cancel</Btn>
+              <Btn onClick={()=>{
+                const val=document.getElementById("pw-input").value;
+                if(val===SCHEDULE_PASSWORD){ setPwModal(false); setApprovalModal(true); document.getElementById("pw-input").value=""; }
+                else { document.getElementById("pw-input").style.borderColor="#c62828"; setTimeout(()=>document.getElementById("pw-input").style.borderColor="#dde3ea",1000); }
+              }}>Confirm</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {approvalModal&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={()=>setApprovalModal(false)}>
+          <div style={{ background:"#fff",borderRadius:14,width:480,padding:0,boxShadow:"0 8px 50px rgba(0,0,0,0.3)",overflow:"hidden" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ background:"linear-gradient(135deg,#01579b,#0277bd)",padding:"18px 24px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <div>
+                <div style={{ color:"rgba(255,255,255,0.7)",fontSize:11,textTransform:"uppercase",letterSpacing:1 }}>Programme Approval</div>
+                <div style={{ color:"#fff",fontWeight:700,fontSize:16 }}>Generate {year} Audit Schedule</div>
+              </div>
+              <button onClick={()=>setApprovalModal(false)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer" }}>✕</button>
+            </div>
+            <div style={{ padding:24,display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ padding:"10px 14px",background:"#fff3e0",borderRadius:8,fontSize:12,color:"#e65100",borderLeft:"4px solid #f57f17" }}>
+                ⚠️ This will generate {AUDIT_AREAS.length*2} audit slots for {year}. Existing slots will be overwritten.
+              </div>
+              <div style={{ fontSize:13,fontWeight:700,color:"#1a2332",borderBottom:"1px solid #eef2f7",paddingBottom:8 }}>Quality Manager</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Name</label>
+                  <input value={approval.qm_name} onChange={e=>setApproval(p=>({...p,qm_name:e.target.value}))} placeholder="Quality Manager full name" style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Date</label>
+                  <input type="date" value={approval.qm_date} onChange={e=>setApproval(p=>({...p,qm_date:e.target.value}))} style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+              </div>
+              <div style={{ fontSize:13,fontWeight:700,color:"#1a2332",borderBottom:"1px solid #eef2f7",paddingBottom:8,marginTop:4 }}>Accountable Manager</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Name</label>
+                  <input value={approval.am_name} onChange={e=>setApproval(p=>({...p,am_name:e.target.value}))} placeholder="Accountable Manager full name" style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 }}>Date</label>
+                  <input type="date" value={approval.am_date} onChange={e=>setApproval(p=>({...p,am_date:e.target.value}))} style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box" }}/>
+                </div>
+              </div>
+              <div style={{ display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid #eef2f7" }}>
+                <Btn variant="ghost" onClick={()=>setApprovalModal(false)}>Cancel</Btn>
+                <Btn onClick={generateSchedule} disabled={generating}>{generating?"Generating...":"⚡ Generate Schedule"}</Btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
