@@ -10,5 +10,15 @@
   <body>
     <noscript>Enable JavaScript to run AeroQualify Pro.</noscript>
     <div id="root"></div>
+    <!-- PDF.js for rasterising attached PDFs into inline images -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      if(window.pdfjsLib){
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        // expose under the key the app checks for
+        window['pdfjs-dist/build/pdf'] = window.pdfjsLib;
+      }
+    </script>
   </body>
 </html>
