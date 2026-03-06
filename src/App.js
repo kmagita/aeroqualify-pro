@@ -2431,6 +2431,705 @@ const RiskRegisterView = ({ data, user, profile, managers, onRefresh, showToast 
   );
 };
 
+
+// ─── Annual Audit Schedule Builder ────────────────────────────
+const AUDIT_AREAS = [
+  "Management Personnel","Instructor Records","Aircraft Documentation",
+  "AMO Oversight","Safety Systems","Ground Operations",
+  "Training Records","Flight Operations","Fuel Supplier Oversight",
+];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const AUDIT_TYPES = ["Internal","Supplier","External","Regulatory","Surveillance"];
+
+const FINDING_LEVELS = ["Level 1 - Major NC","Level 2 - Minor NC","Level 3 - Observation","Repeat Finding","Regulatory"];
+
+const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
+  const [tab, setTab] = useState("details");
+  const [form, setForm] = useState({
+    lead_auditor:     slot.lead_auditor||"",
+    auditee:          slot.auditee||"",
+    planned_date:     slot.planned_date||"",
+    actual_date:      slot.actual_date||"",
+    status:           slot.status||"Scheduled",
+    findings:         slot.findings||0,
+    observations:     slot.observations||0,
+    notes:            slot.notes||"",
+    audit_type:       slot.audit_type||"Internal",
+    // Report fields
+    audit_criteria:   slot.audit_criteria||"AS9100D / KCAA ANO / Quality Manual",
+    opening_brief:    slot.opening_brief||"",
+    closing_brief:    slot.closing_brief||"",
+    exec_summary:     slot.exec_summary||"",
+    positive_findings:slot.positive_findings||"",
+    distribution:     slot.distribution||"Accountable Manager, Quality Manager",
+    prepared_by:      slot.prepared_by||"",
+    approved_by:      slot.approved_by||"",
+    finding_items:    slot.finding_items||"[]",
+  });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // Finding items management
+  const [findingItems, setFindingItems] = useState(()=>{
+    try { return JSON.parse(slot.finding_items||"[]"); } catch { return []; }
+  });
+  const addFinding = () => setFindingItems(p=>[...p,{id:Date.now(),ref:"",level:"Level 2 - Minor NC",description:"",clause:"",requirement:"",evidence:"",car_raised:false}]);
+  const updateFinding = (id,k,v) => setFindingItems(p=>p.map(f=>f.id===id?{...f,[k]:v}:f));
+  const removeFinding = (id) => setFindingItems(p=>p.filter(f=>f.id!==id));
+
+  const handleSave = () => {
+    const items = JSON.stringify(findingItems);
+    const level1 = findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length;
+    const level2 = findingItems.filter(f=>f.level.includes("Level 2")).length;
+    const obs    = findingItems.filter(f=>f.level.includes("Observation")).length;
+    onSave({
+      ...slot,...form,
+      finding_items: items,
+      findings: level1+level2,
+      observations: obs,
+    });
+  };
+
+  const inputStyle = { width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box",background:"#fff" };
+  const labelStyle = { fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 };
+  const sectionStyle = { borderTop:"2px solid #eef2f7",paddingTop:16,marginTop:4 };
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:"#fff",borderRadius:14,width:720,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 8px 50px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ background:"linear-gradient(135deg,#01579b,#0277bd)",padding:"18px 24px",borderRadius:"14px 14px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
+          <div>
+            <div style={{ color:"rgba(255,255,255,0.7)",fontSize:11,textTransform:"uppercase",letterSpacing:1 }}>Audit Record</div>
+            <div style={{ color:"#fff",fontWeight:700,fontSize:16 }}>{slot.area} — {MONTHS[(slot.month||1)-1]} {slot.year} (Slot #{slot.slot})</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer" }}>✕</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex",borderBottom:"2px solid #eef2f7",background:"#fafbfc",flexShrink:0 }}>
+          {[["details","📋 Details"],["report","📄 Audit Report"],["findings","🔍 Findings ("+findingItems.length+")"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{ padding:"12px 20px",border:"none",borderBottom:tab===id?"3px solid #01579b":"3px solid transparent",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,color:tab===id?"#01579b":"#5f7285",background:"transparent",marginBottom:-2 }}>{label}</button>
+          ))}
+        </div>
+
+        <div style={{ padding:24,overflowY:"auto",flex:1 }}>
+
+          {/* ── DETAILS TAB ── */}
+          {tab==="details" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                <div><label style={labelStyle}>Audit Type</label>
+                  <select value={form.audit_type} onChange={e=>set("audit_type",e.target.value)} style={inputStyle}>
+                    {AUDIT_TYPES.map(t=><option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyle}>Status</label>
+                  <select value={form.status} onChange={e=>set("status",e.target.value)} style={inputStyle}>
+                    {["Scheduled","In Progress","Completed","Cancelled","Overdue"].map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyle}>Lead Auditor</label>
+                  <input value={form.lead_auditor} onChange={e=>set("lead_auditor",e.target.value)} placeholder="Name" style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Auditee / Department</label>
+                  <input value={form.auditee} onChange={e=>set("auditee",e.target.value)} placeholder="Dept or person" style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Planned Date</label>
+                  <input type="date" value={form.planned_date} onChange={e=>set("planned_date",e.target.value)} style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Actual Date</label>
+                  <input type="date" value={form.actual_date} onChange={e=>set("actual_date",e.target.value)} style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Opening Brief Time</label>
+                  <input value={form.opening_brief} onChange={e=>set("opening_brief",e.target.value)} placeholder="e.g. 09:00" style={inputStyle}/>
+                </div>
+                <div><label style={labelStyle}>Closing Brief Time</label>
+                  <input value={form.closing_brief} onChange={e=>set("closing_brief",e.target.value)} placeholder="e.g. 15:00" style={inputStyle}/>
+                </div>
+              </div>
+              <div><label style={labelStyle}>Audit Criteria / Reference Documents</label>
+                <input value={form.audit_criteria} onChange={e=>set("audit_criteria",e.target.value)} style={inputStyle}/>
+              </div>
+              <div><label style={labelStyle}>Notes / Scope</label>
+                <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="Scope, methodology, areas covered..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+
+          {/* ── REPORT TAB ── */}
+          {tab==="report" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
+              <div style={{ padding:"10px 14px",background:"#e3f2fd",borderRadius:8,fontSize:12,color:"#01579b",borderLeft:"4px solid #01579b" }}>
+                Complete this section after the audit is conducted. This forms the official audit report.
+              </div>
+              <div><label style={labelStyle}>Executive Summary</label>
+                <textarea value={form.exec_summary} onChange={e=>set("exec_summary",e.target.value)} rows={5} placeholder="Provide an overall assessment of the audit area. Summarise the general level of compliance, key strengths and areas requiring improvement..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+              <div style={sectionStyle}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.primaryDk,marginBottom:12,textTransform:"uppercase",letterSpacing:0.5 }}>Summary of Results</div>
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12 }}>
+                  {[
+                    {label:"Level 1 / Major NCs",val:findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length,color:"#c62828",bg:"#ffebee"},
+                    {label:"Level 2 / Minor NCs",val:findingItems.filter(f=>f.level.includes("Level 2")).length,color:"#e65100",bg:"#fff3e0"},
+                    {label:"Observations",val:findingItems.filter(f=>f.level.includes("Observation")).length,color:"#01579b",bg:"#e3f2fd"},
+                  ].map(s=>(
+                    <div key={s.label} style={{ background:s.bg,borderRadius:8,padding:"12px 14px",textAlign:"center" }}>
+                      <div style={{ fontSize:28,fontWeight:800,color:s.color }}>{s.val}</div>
+                      <div style={{ fontSize:11,color:s.color,fontWeight:600 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={sectionStyle}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.primaryDk,marginBottom:12,textTransform:"uppercase",letterSpacing:0.5 }}>Positive Findings / Commendations</div>
+                <textarea value={form.positive_findings} onChange={e=>set("positive_findings",e.target.value)} rows={3} placeholder="Record any areas of good practice, compliance excellence or commendations noted during the audit..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+              <div style={sectionStyle}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.primaryDk,marginBottom:12,textTransform:"uppercase",letterSpacing:0.5 }}>Report Administration</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+                  <div><label style={labelStyle}>Prepared By</label>
+                    <input value={form.prepared_by} onChange={e=>set("prepared_by",e.target.value)} placeholder="Lead Auditor name" style={inputStyle}/>
+                  </div>
+                  <div><label style={labelStyle}>Approved By</label>
+                    <input value={form.approved_by} onChange={e=>set("approved_by",e.target.value)} placeholder="Quality Manager name" style={inputStyle}/>
+                  </div>
+                  <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Distribution List</label>
+                    <input value={form.distribution} onChange={e=>set("distribution",e.target.value)} placeholder="e.g. Accountable Manager, Quality Manager, Auditee" style={inputStyle}/>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── FINDINGS TAB ── */}
+          {tab==="findings" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ fontSize:13,color:T.muted }}>Record each individual finding. Findings will auto-populate the report summary.</div>
+                <Btn size="sm" onClick={addFinding}>+ Add Finding</Btn>
+              </div>
+              {findingItems.length===0 && (
+                <div style={{ padding:40,textAlign:"center",background:"#f5f8fc",borderRadius:10,border:"2px dashed #dde3ea" }}>
+                  <div style={{ fontSize:32,marginBottom:8 }}>🔍</div>
+                  <div style={{ fontSize:14,fontWeight:600,color:T.muted,marginBottom:4 }}>No findings recorded</div>
+                  <div style={{ fontSize:12,color:T.muted,marginBottom:16 }}>Add findings, observations and non-conformances from this audit</div>
+                  <Btn size="sm" onClick={addFinding}>+ Add First Finding</Btn>
+                </div>
+              )}
+              {findingItems.map((f,i)=>{
+                const levelColors = {
+                  "Level 1 - Major NC":   {bg:"#ffebee",border:"#ef9a9a",text:"#c62828"},
+                  "Level 2 - Minor NC":   {bg:"#fff3e0",border:"#ffcc80",text:"#e65100"},
+                  "Level 3 - Observation":{bg:"#e3f2fd",border:"#90caf9",text:"#01579b"},
+                  "Repeat Finding":       {bg:"#fce4ec",border:"#f48fb1",text:"#880e4f"},
+                  "Regulatory":           {bg:"#ffebee",border:"#ef9a9a",text:"#b71c1c"},
+                };
+                const lc = levelColors[f.level]||levelColors["Level 2 - Minor NC"];
+                return (
+                  <div key={f.id} style={{ border:`2px solid ${lc.border}`,borderRadius:10,overflow:"hidden" }}>
+                    <div style={{ padding:"8px 14px",background:lc.bg,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                        <span style={{ fontSize:12,fontWeight:700,color:lc.text }}>Finding #{i+1}</span>
+                        <select value={f.level} onChange={e=>updateFinding(f.id,"level",e.target.value)} style={{ fontSize:11,fontWeight:700,color:lc.text,background:lc.bg,border:`1px solid ${lc.border}`,borderRadius:6,padding:"2px 6px",cursor:"pointer" }}>
+                          {FINDING_LEVELS.map(l=><option key={l}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                        <label style={{ display:"flex",alignItems:"center",gap:4,fontSize:11,color:lc.text,fontWeight:600,cursor:"pointer" }}>
+                          <input type="checkbox" checked={f.car_raised} onChange={e=>updateFinding(f.id,"car_raised",e.target.checked)}/>
+                          CAR Raised
+                        </label>
+                        <button onClick={()=>removeFinding(f.id)} style={{ background:"none",border:"none",color:lc.text,cursor:"pointer",fontSize:16,fontWeight:700 }}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{ padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,background:"#fff" }}>
+                      <div><label style={labelStyle}>Finding Reference</label>
+                        <input value={f.ref} onChange={e=>updateFinding(f.id,"ref",e.target.value)} placeholder="e.g. F-001" style={inputStyle}/>
+                      </div>
+                      <div><label style={labelStyle}>QMS Clause / Reference</label>
+                        <input value={f.clause} onChange={e=>updateFinding(f.id,"clause",e.target.value)} placeholder="e.g. 8.5.2" style={inputStyle}/>
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Finding Description</label>
+                        <textarea value={f.description} onChange={e=>updateFinding(f.id,"description",e.target.value)} rows={3} placeholder="Describe the non-conformance or observation in detail. State what was found, where, and when..." style={{...inputStyle,resize:"vertical"}}/>
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Requirement / Standard</label>
+                        <textarea value={f.requirement} onChange={e=>updateFinding(f.id,"requirement",e.target.value)} rows={2} placeholder="State the specific requirement that is not being met..." style={{...inputStyle,resize:"vertical"}}/>
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Objective Evidence</label>
+                        <textarea value={f.evidence} onChange={e=>updateFinding(f.id,"evidence",e.target.value)} rows={2} placeholder="Describe the objective evidence observed (documents reviewed, records sighted, personnel interviewed)..." style={{...inputStyle,resize:"vertical"}}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",padding:"16px 24px",borderTop:"1px solid #eef2f7",background:"#fafbfc",flexShrink:0 }}>
+          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+          {slot.status==="Completed"&&<Btn variant="ghost" onClick={()=>generateAuditReport({...slot,...form,finding_items:JSON.stringify(findingItems)})}>📄 Export PDF</Btn>}
+          <Btn onClick={handleSave}>💾 Save Audit Record</Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Audit Report PDF Generator ───────────────────────────────
+const generateAuditReport = async (slot) => {
+  const { jsPDF } = await import("jspdf");
+  const { default: autoTable } = await import("jspdf-autotable");
+  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const W=210; const M=14; const col=W-M*2;
+  const LINE_H=4.5; const LABEL_SZ=6.5; const BODY_SZ=9;
+
+  let findingItems = [];
+  try { findingItems = JSON.parse(slot.finding_items||"[]"); } catch {}
+
+  // ── helpers (same pattern as CAPA PDF) ──
+  const sectionTitle = (text, y, color=[1,87,155]) => {
+    doc.setFillColor(...color); doc.rect(M,y,col,7,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text(text, M+3, y+4.8); doc.setTextColor(0,0,0);
+    return y+9;
+  };
+  const box = (label, value, x, y, w) => {
+    doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+    const lines = doc.splitTextToSize(String(value||"—"), w-5);
+    const h = 5+4+lines.length*LINE_H+3;
+    doc.setFillColor(245,248,252); doc.rect(x,y,w,h,"F");
+    doc.setDrawColor(221,227,234); doc.rect(x,y,w,h,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), x+2.5, y+4);
+    doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+    doc.text(lines, x+2.5, y+4+LINE_H+1);
+    return y+h+2;
+  };
+  const boxRow = (pairs, x, y, totalW) => {
+    const gap=2; const n=pairs.length; const w=(totalW-(n-1)*gap)/n;
+    let maxH=0;
+    pairs.forEach(([,val])=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ);
+      const lines=doc.splitTextToSize(String(val||"—"),w-5);
+      const h=5+4+lines.length*LINE_H+3; if(h>maxH) maxH=h;
+    });
+    pairs.forEach(([label,val],i)=>{
+      const bx=x+i*(w+gap);
+      doc.setFillColor(245,248,252); doc.rect(bx,y,w,maxH,"F");
+      doc.setDrawColor(221,227,234); doc.rect(bx,y,w,maxH,"S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+      doc.text(label.toUpperCase(), bx+2.5, y+4);
+      doc.setFont("helvetica","normal"); doc.setFontSize(BODY_SZ); doc.setTextColor(26,35,50);
+      const lines=doc.splitTextToSize(String(val||"—"),w-5);
+      doc.text(lines, bx+2.5, y+4+LINE_H+1);
+    });
+    return y+maxH+2;
+  };
+  const FOOTER_Y=287; const NEW_PAGE_Y=20;
+  const needPage = (cy, need=20) => { if(cy+need>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; } return cy; };
+  const addFooter = () => {
+    const pages = doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,286,W-M,286);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+      doc.text("Pegasus Flyers (E.A.) Ltd. · Quality Management System · Audit Report", M, 290);
+      doc.text(`Page ${i} of ${pages}`, W-M, 290, {align:"right"});
+    }
+  };
+
+  // ── HEADER ──────────────────────────────────────────────────
+  doc.setFillColor(26,35,50); doc.rect(0,0,W,28,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(255,255,255);
+  doc.text("AeroQualify Pro", M, 11);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,185,210);
+  doc.text("AUDIT REPORT", M, 17);
+  doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(160,185,210);
+  doc.text("Pegasus Flyers (E.A.) Ltd.  |  Wilson Airport, Nairobi  |  +254206001467/8", W-M, 11, {align:"right"});
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")}`, W-M, 17, {align:"right"});
+
+  let y = 34;
+
+  // ── AUDIT IDENTITY BAR ───────────────────────────────────────
+  const statusColors = {
+    Completed:[46,125,50], "In Progress":[1,87,155],
+    Scheduled:[245,127,23], Overdue:[198,40,40], Cancelled:[117,117,117]
+  };
+  const sc = statusColors[slot.status]||[1,87,155];
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,16,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,16,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor(26,35,50);
+  doc.text(`${slot.area} — Audit Slot #${slot.slot}`, M+4, y+7);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(95,114,133);
+  doc.text(`${MONTHS[(slot.month||1)-1]} ${slot.year}  ·  ${slot.audit_type||"Internal"}`, M+4, y+13);
+  // Status badge
+  doc.setFillColor(...sc); doc.roundedRect(W-M-28, y+4, 26, 8, 2, 2, "F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(255,255,255);
+  doc.text((slot.status||"Scheduled").toUpperCase(), W-M-15, y+9.2, {align:"center"});
+  y += 20;
+
+  // ── SECTION 1: AUDIT DETAILS ─────────────────────────────────
+  y = needPage(y,12); y = sectionTitle("SECTION 1 — AUDIT DETAILS", y);
+  y = boxRow([["Lead Auditor", slot.lead_auditor||"—"],["Auditee / Department", slot.auditee||"—"]], M, y, col);
+  y = boxRow([["Planned Date", slot.planned_date||"—"],["Actual Date", slot.actual_date||"—"]], M, y, col);
+  y = boxRow([["Opening Brief", slot.opening_brief||"—"],["Closing Brief", slot.closing_brief||"—"]], M, y, col);
+  y = needPage(y,20); y = box("Audit Criteria / Reference Documents", slot.audit_criteria||"—", M, y, col);
+  y = needPage(y,20); y = box("Scope / Areas Covered", slot.notes||"—", M, y, col);
+  y += 4;
+
+  // ── SECTION 2: EXECUTIVE SUMMARY ────────────────────────────
+  y = needPage(y,12); y = sectionTitle("SECTION 2 — EXECUTIVE SUMMARY", y, [0,105,92]);
+  y = needPage(y,20); y = box("Executive Summary", slot.exec_summary||"—", M, y, col);
+
+  // Results summary boxes
+  y = needPage(y,22);
+  const level1 = findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length;
+  const level2 = findingItems.filter(f=>f.level.includes("Level 2")).length;
+  const obs    = findingItems.filter(f=>f.level.includes("Observation")).length;
+  const repeat = findingItems.filter(f=>f.level==="Repeat Finding").length;
+  const resultW = (col-6)/4;
+  [
+    ["Level 1 / Major NCs", level1, [198,40,40]],
+    ["Level 2 / Minor NCs", level2, [230,81,0]],
+    ["Observations",        obs,    [1,87,155]],
+    ["Repeat Findings",     repeat, [136,14,79]],
+  ].forEach(([label, val, color], i) => {
+    const bx = M + i*(resultW+2);
+    doc.setFillColor(color[0],color[1],color[2]); doc.rect(bx,y,resultW,18,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
+    doc.text(String(val), bx+resultW/2, y+11, {align:"center"});
+    doc.setFontSize(6); doc.text(label.toUpperCase(), bx+resultW/2, y+16, {align:"center"});
+  });
+  y += 22;
+
+  if(slot.positive_findings){
+    y = needPage(y,20); y = box("Positive Findings / Commendations", slot.positive_findings, M, y, col);
+  }
+  y += 4;
+
+  // ── SECTION 3: FINDINGS DETAIL ───────────────────────────────
+  if(findingItems.length > 0){
+    y = needPage(y,12); y = sectionTitle("SECTION 3 — DETAILED FINDINGS", y, [183,28,28]);
+    findingItems.forEach((f, fi) => {
+      y = needPage(y, 50);
+      const levelC = f.level.includes("Level 1")||f.level==="Regulatory" ? [198,40,40] :
+                     f.level.includes("Level 2") ? [230,81,0] :
+                     f.level==="Repeat Finding"  ? [136,14,79] : [1,87,155];
+      // Finding header bar
+      doc.setFillColor(...levelC); doc.rect(M,y,col,7,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+      doc.text(`Finding #${fi+1}  —  ${f.level}${f.ref?" ("+f.ref+")":""}`, M+3, y+4.8);
+      if(f.car_raised){ doc.text("CAR RAISED ✓", W-M-3, y+4.8, {align:"right"}); }
+      y += 9;
+      if(f.clause){ y = boxRow([["QMS Clause / Reference", f.clause],["Car Raised", f.car_raised?"Yes":"No"]], M, y, col); }
+      y = needPage(y,20); y = box("Finding Description", f.description||"—", M, y, col);
+      if(f.requirement){ y = needPage(y,20); y = box("Requirement / Standard Not Met", f.requirement, M, y, col); }
+      if(f.evidence){ y = needPage(y,20); y = box("Objective Evidence", f.evidence, M, y, col); }
+      y += 4;
+    });
+  } else {
+    y = needPage(y,12); y = sectionTitle("SECTION 3 — DETAILED FINDINGS", y, [183,28,28]);
+    y = needPage(y,14); y = box("Findings", "No findings or non-conformances recorded for this audit.", M, y, col);
+    y += 4;
+  }
+
+  // ── SECTION 4: REPORT ADMINISTRATION ─────────────────────────
+  y = needPage(y,12); y = sectionTitle("SECTION 4 — REPORT ADMINISTRATION", y, [69,39,160]);
+  y = boxRow([["Prepared By", slot.prepared_by||"—"],["Approved By", slot.approved_by||"—"]], M, y, col);
+  y = needPage(y,20); y = box("Distribution List", slot.distribution||"—", M, y, col);
+  y += 4;
+
+  // ── SIGNATURE BLOCK ───────────────────────────────────────────
+  y = needPage(y, 40);
+  doc.setDrawColor(221,227,234); doc.setLineWidth(0.3);
+  const sigW = (col-4)/2;
+  [["Lead Auditor Signature", slot.lead_auditor||""], ["Quality Manager Signature", slot.approved_by||""]].forEach(([label, name], i) => {
+    const bx = M + i*(sigW+4);
+    doc.setFillColor(245,248,252); doc.rect(bx,y,sigW,22,"F");
+    doc.rect(bx,y,sigW,22,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(LABEL_SZ); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), bx+3, y+5);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+    doc.text(name, bx+3, y+13);
+    doc.setDrawColor(170,190,210); doc.line(bx+3, y+18, bx+sigW-3, y+18);
+    doc.setFontSize(7); doc.setTextColor(140,160,180);
+    doc.text("Signature / Date", bx+3, y+21);
+  });
+
+  addFooter();
+  const filename = `Audit-Report-${slot.area.replace(/\s+/g,"-")}-${slot.year}-Slot${slot.slot}.pdf`;
+  doc.save(filename);
+};
+
+
+const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
+  const isQM    = ["admin","quality_manager"].includes(profile?.role);
+  const isAdmin = profile?.role==="admin";
+  const [view,  setView]  = useState("schedule"); // "schedule" | "list"
+  const [year,  setYear]  = useState(new Date().getFullYear());
+  const [modal, setModal] = useState(null); // slot object
+  const [generating, setGenerating] = useState(false);
+
+  const schedule = data.auditSchedule||[];
+
+  // Get slot for a given area + slot number (1 or 2) for current year
+  const getSlot = (area, slotNum) =>
+    schedule.find(s=>s.area===area && s.slot===slotNum && s.year===year);
+
+  // Status colour
+  const slotColor = (slot) => {
+    if(!slot) return { bg:"#f5f8fc", border:"#dde3ea", text:"#8fa8c0", label:"Not Set" };
+    const s = slot.status;
+    if(s==="Completed")  return { bg:"#e8f5e9", border:"#a5d6a7", text:"#2e7d32", label:"Completed" };
+    if(s==="In Progress") return { bg:"#e3f2fd", border:"#90caf9", text:"#01579b", label:"In Progress" };
+    if(s==="Overdue")    return { bg:"#ffebee", border:"#ef9a9a", text:"#c62828", label:"Overdue" };
+    if(s==="Cancelled")  return { bg:"#f5f5f5", border:"#e0e0e0", text:"#757575", label:"Cancelled" };
+    return { bg:"#fff8e1", border:"#ffe082", text:"#f57f17", label:"Scheduled" };
+  };
+
+  // Generate annual schedule for a year
+  const generateSchedule = async () => {
+    setGenerating(true);
+    try {
+      // Spread 9 areas across 12 months — slot 1 in H1 (months 1-6), slot 2 in H2 (months 7-12)
+      const rows = [];
+      AUDIT_AREAS.forEach((area, idx) => {
+        const month1 = 1 + (idx % 6);   // spread across Jan-Jun
+        const month2 = 7 + (idx % 6);   // spread across Jul-Dec
+        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-1`, year, area, slot:1, month:month1, status:"Scheduled", findings:0, observations:0 });
+        rows.push({ id:`AS-${year}-${area.replace(/\s+/g,"-")}-2`, year, area, slot:2, month:month2, status:"Scheduled", findings:0, observations:0 });
+      });
+      const { error } = await supabase.from("audit_schedule").upsert(rows, { onConflict:"id" });
+      if(error) { showToast(`Error: ${error.message}`,"error"); return; }
+      showToast(`${year} audit schedule generated — ${rows.length} slots created`,"success");
+      onRefresh();
+    } catch(e) { showToast(`Error: ${e.message}`,"error"); }
+    finally { setGenerating(false); }
+  };
+
+  // Save a slot
+  const saveSlot = async (slot) => {
+    const { id, area, slotNum, year:y, month, ...rest } = slot;
+    const payload = { id: slot.id||`AS-${y}-${area?.replace(/\s+/g,"-")}-${slot.slot}`, year:y||year, area, slot:slot.slot, month, ...rest };
+    const { error } = await supabase.from("audit_schedule").upsert(payload, { onConflict:"id" });
+    if(error) { showToast(`Error: ${error.message}`,"error"); return; }
+
+    // If completed with findings, prompt to raise CARs
+    if(slot.status==="Completed" && Number(slot.findings)>0) {
+      showToast(`Audit saved — ${slot.findings} finding(s) recorded. Raise CARs from the CAPA module.`,"success");
+    } else {
+      showToast("Audit slot saved","success");
+    }
+    setModal(null);
+    onRefresh();
+  };
+
+  // Programme completion stats
+  const totalSlots  = AUDIT_AREAS.length * 2;
+  const yearSlots   = schedule.filter(s=>s.year===year);
+  const completed   = yearSlots.filter(s=>s.status==="Completed").length;
+  const overdue     = yearSlots.filter(s=>s.status==="Overdue"||(!["Completed","Cancelled"].includes(s.status)&&s.planned_date&&new Date(s.planned_date)<new Date())).length;
+  const pct         = totalSlots>0 ? Math.round(completed/totalSlots*100) : 0;
+  const totalFindings = yearSlots.reduce((a,s)=>a+Number(s.findings||0),0);
+  const totalObs      = yearSlots.reduce((a,s)=>a+Number(s.observations||0),0);
+
+  const hasSchedule = yearSlots.length > 0;
+
+  return (
+    <div style={{ padding:24, maxWidth:1200, margin:"0 auto" }}>
+      {/* Header */}
+      <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:24,flexWrap:"wrap",gap:12 }}>
+        <div>
+          <div style={{ fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:22,color:T.primaryDk }}>Audit Management</div>
+          <div style={{ fontSize:13,color:T.muted,marginTop:2 }}>Annual audit programme, schedule and records</div>
+        </div>
+        <div style={{ display:"flex",gap:10,alignItems:"center",flexWrap:"wrap" }}>
+          {/* Year selector */}
+          <div style={{ display:"flex",alignItems:"center",gap:6,background:"#f5f8fc",borderRadius:8,padding:"4px 8px",border:"1px solid #dde3ea" }}>
+            <button onClick={()=>setYear(y=>y-1)} style={{ background:"none",border:"none",cursor:"pointer",color:T.primary,fontWeight:700,fontSize:16,padding:"0 4px" }}>‹</button>
+            <span style={{ fontWeight:700,fontSize:14,color:T.primaryDk,minWidth:36,textAlign:"center" }}>{year}</span>
+            <button onClick={()=>setYear(y=>y+1)} style={{ background:"none",border:"none",cursor:"pointer",color:T.primary,fontWeight:700,fontSize:16,padding:"0 4px" }}>›</button>
+          </div>
+          {/* View toggle */}
+          <div style={{ display:"flex",background:"#f5f8fc",borderRadius:8,border:"1px solid #dde3ea",overflow:"hidden" }}>
+            {[["schedule","📅 Schedule"],["list","📋 All Audits"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setView(v)} style={{ padding:"7px 14px",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:view===v?"#01579b":"transparent",color:view===v?"#fff":T.muted,transition:"all 0.2s" }}>{l}</button>
+            ))}
+          </div>
+          {isQM && (
+            <Btn onClick={generateSchedule} disabled={generating}>
+              {generating?"Generating...":"⚡ Generate "+year+" Schedule"}
+            </Btn>
+          )}
+        </div>
+      </div>
+
+      {/* Stats bar */}
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:24 }}>
+        {[
+          {label:"Programme Completion",value:`${pct}%`,sub:`${completed}/${totalSlots} audits`,color:pct===100?T.green:pct>50?T.yellow:T.red},
+          {label:"Completed",value:completed,sub:"This year",color:T.green},
+          {label:"Overdue",value:overdue,sub:"Past planned date",color:overdue>0?T.red:T.muted},
+          {label:"Total Findings",value:totalFindings,sub:`+ ${totalObs} observations`,color:totalFindings>0?T.yellow:T.green},
+        ].map(s=>(
+          <div key={s.label} style={{ background:"#fff",borderRadius:10,padding:"14px 18px",border:"1px solid #dde3ea",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>{s.label}</div>
+            <div style={{ fontSize:26,fontWeight:800,color:s.color,lineHeight:1 }}>{s.value}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ background:"#fff",borderRadius:10,padding:"14px 20px",border:"1px solid #dde3ea",marginBottom:24 }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+          <span style={{ fontSize:12,fontWeight:700,color:T.primaryDk }}>Annual Programme Progress — {year}</span>
+          <span style={{ fontSize:12,color:T.muted }}>{completed} of {totalSlots} audits completed</span>
+        </div>
+        <div style={{ height:10,background:"#eef2f7",borderRadius:5,overflow:"hidden" }}>
+          <div style={{ height:"100%",width:`${pct}%`,background:pct===100?"#2e7d32":pct>50?"#f57f17":"#01579b",borderRadius:5,transition:"width 0.5s" }}/>
+        </div>
+      </div>
+
+      {/* Schedule Grid View */}
+      {view==="schedule" && (
+        <div style={{ background:"#fff",borderRadius:12,border:"1px solid #dde3ea",overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
+          {!hasSchedule ? (
+            <div style={{ padding:60,textAlign:"center" }}>
+              <div style={{ fontSize:48,marginBottom:16 }}>📅</div>
+              <div style={{ fontSize:18,fontWeight:700,color:T.primaryDk,marginBottom:8 }}>No schedule for {year}</div>
+              <div style={{ fontSize:13,color:T.muted,marginBottom:24 }}>Generate the annual audit programme to populate the schedule</div>
+              {isQM&&<Btn onClick={generateSchedule} disabled={generating}>{generating?"Generating...":"⚡ Generate "+year+" Audit Schedule"}</Btn>}
+            </div>
+          ) : (
+            <table style={{ width:"100%",borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"#1a2332" }}>
+                  <th style={{ padding:"12px 16px",textAlign:"left",fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:0.5,width:200 }}>Audit Area</th>
+                  {MONTHS.map(m=>(
+                    <th key={m} style={{ padding:"8px 4px",textAlign:"center",fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:0.3 }}>{m}</th>
+                  ))}
+                  <th style={{ padding:"12px 16px",textAlign:"center",fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:0.5 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AUDIT_AREAS.map((area,ai)=>{
+                  const slot1 = getSlot(area,1);
+                  const slot2 = getSlot(area,2);
+                  const bothDone = slot1?.status==="Completed" && slot2?.status==="Completed";
+                  return (
+                    <tr key={area} style={{ borderBottom:"1px solid #eef2f7",background:ai%2===0?"#fff":"#fafbfc" }}>
+                      <td style={{ padding:"12px 16px",fontSize:13,fontWeight:600,color:T.primaryDk }}>
+                        {area}
+                      </td>
+                      {MONTHS.map((_,mi)=>{
+                        const monthNum = mi+1;
+                        const s1 = slot1?.month===monthNum ? slot1 : null;
+                        const s2 = slot2?.month===monthNum ? slot2 : null;
+                        const hasSlot = s1||s2;
+                        if(!hasSlot) return <td key={mi} style={{ padding:"8px 4px",textAlign:"center" }}><div style={{ width:8,height:8,borderRadius:"50%",background:"#eef2f7",margin:"0 auto" }}/></td>;
+                        const slot = s1||s2;
+                        const c = slotColor(slot);
+                        return (
+                          <td key={mi} style={{ padding:"4px",textAlign:"center" }}>
+                            <div
+                              onClick={()=>isQM&&setModal(slot)}
+                              title={`${area} — Slot ${slot.slot}
+Status: ${slot.status||"Scheduled"}
+Lead: ${slot.lead_auditor||"Not assigned"}
+Planned: ${slot.planned_date||"Not set"}`}
+                              style={{ width:28,height:28,borderRadius:6,background:c.bg,border:`2px solid ${c.border}`,margin:"0 auto",cursor:isQM?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:c.text,transition:"transform 0.15s" }}
+                              onMouseEnter={e=>{if(isQM)e.target.style.transform="scale(1.2)";}}
+                              onMouseLeave={e=>{e.target.style.transform="scale(1)";}}
+                            >
+                              {slot.status==="Completed"?"✓":slot.slot}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding:"8px 16px",textAlign:"center" }}>
+                        {bothDone
+                          ? <span style={{ fontSize:11,fontWeight:700,color:"#2e7d32",background:"#e8f5e9",padding:"3px 10px",borderRadius:12 }}>✓ Complete</span>
+                          : <span style={{ fontSize:11,fontWeight:600,color:T.muted,background:"#f5f8fc",padding:"3px 10px",borderRadius:12 }}>
+                              {[slot1,slot2].filter(s=>s?.status==="Completed").length}/2
+                            </span>
+                        }
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* List View — All individual audits */}
+      {view==="list" && (
+        <div style={{ background:"#fff",borderRadius:12,border:"1px solid #dde3ea",overflow:"hidden" }}>
+          <table style={{ width:"100%",borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ background:"#f5f8fc",borderBottom:"2px solid #dde3ea" }}>
+                {["Area","Slot","Month","Type","Lead Auditor","Planned Date","Actual Date","Findings","Obs","Status",""].map(h=>(
+                  <th key={h} style={{ padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {yearSlots.length===0
+                ? <tr><td colSpan={11} style={{ padding:40,textAlign:"center",color:T.muted,fontSize:13 }}>No audits scheduled for {year}</td></tr>
+                : yearSlots.sort((a,b)=>a.month-b.month||a.slot-b.slot).map((s,i)=>{
+                  const c = slotColor(s);
+                  return (
+                    <tr key={s.id} style={{ borderBottom:"1px solid #eef2f7",background:i%2===0?"#fff":"#fafbfc" }}>
+                      <td style={{ padding:"10px 14px",fontSize:13,fontWeight:600,color:T.primaryDk }}>{s.area}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.muted }}>#{s.slot}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{MONTHS[(s.month||1)-1]}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.audit_type||"Internal"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.lead_auditor||"—"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.planned_date||"—"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.actual_date||"—"}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:Number(s.findings)>0?T.red:T.muted,fontWeight:Number(s.findings)>0?700:400 }}>{s.findings||0}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.muted }}>{s.observations||0}</td>
+                      <td style={{ padding:"10px 14px" }}>
+                        <span style={{ fontSize:11,fontWeight:700,color:c.text,background:c.bg,border:`1px solid ${c.border}`,padding:"3px 10px",borderRadius:12 }}>{s.status||"Scheduled"}</span>
+                      </td>
+                      <td style={{ padding:"10px 14px" }}>
+                        <div style={{ display:"flex",gap:6 }}>
+                          {isQM&&<Btn size="sm" variant="ghost" onClick={()=>setModal(s)}>Edit</Btn>}
+                          {s.status==="Completed"&&<Btn size="sm" variant="ghost" onClick={()=>generateAuditReport(s)}>📄 PDF</Btn>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              }
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Legend */}
+      {view==="schedule"&&hasSchedule&&(
+        <div style={{ display:"flex",gap:16,marginTop:16,flexWrap:"wrap" }}>
+          {[["Scheduled","#fff8e1","#ffe082","#f57f17"],["In Progress","#e3f2fd","#90caf9","#01579b"],["Completed","#e8f5e9","#a5d6a7","#2e7d32"],["Overdue","#ffebee","#ef9a9a","#c62828"],["Cancelled","#f5f5f5","#e0e0e0","#757575"]].map(([l,bg,border,text])=>(
+            <div key={l} style={{ display:"flex",alignItems:"center",gap:6 }}>
+              <div style={{ width:16,height:16,borderRadius:4,background:bg,border:`2px solid ${border}` }}/>
+              <span style={{ fontSize:11,color:T.muted,fontWeight:600 }}>{l}</span>
+            </div>
+          ))}
+          <div style={{ fontSize:11,color:T.muted,marginLeft:"auto" }}>Click a slot to edit · Numbers = slot 1 or 2 of biannual cycle</div>
+        </div>
+      )}
+
+      {modal&&<AuditScheduleModal slot={modal} onSave={saveSlot} onClose={()=>setModal(null)} managers={managers}/>}
+    </div>
+  );
+};
+
 // ─── TABS ─────────────────────────────────────────────────────
 const TABS = [
   {id:"dashboard",    label:"Dashboard",       icon:"▦",  group:"main"},
@@ -2450,7 +3149,7 @@ export default function App() {
   const [user,setUser]         = useState(null);
   const [profile,setProfile]   = useState(null);
   const [managers,setManagers] = useState([]);
-  const [data,setData]         = useState({cars:[],caps:[],verifications:[],documents:[],flightDocs:[],audits:[],contractors:[],changeLog:[],risks:[]});
+  const [data,setData]         = useState({cars:[],caps:[],verifications:[],documents:[],flightDocs:[],audits:[],contractors:[],changeLog:[],risks:[],auditSchedule:[]});
   const [activeTab,setTab]     = useState("dashboard");
   const [toast,setToast]       = useState(null);
   const [loading,setLoading]   = useState(true);
@@ -2471,7 +3170,7 @@ export default function App() {
 
   const loadAll = useCallback(async()=>{
     if(!user)return;
-    const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof,risks]=await Promise.all([
+    const [cars,caps,verifs,docs,fdocs,audits,contractors,logs,mgrs,prof,risks,auditSchedule]=await Promise.all([
       supabase.from(TABLES.cars).select("*").order("created_at",{ascending:false}),
       supabase.from(TABLES.caps).select("*"),
       supabase.from(TABLES.verifications).select("*"),
@@ -2483,6 +3182,7 @@ export default function App() {
       supabase.from(TABLES.managers).select("*").order("id"),
       supabase.from(TABLES.profiles).select("*").eq("id",user.id).single(),
       supabase.from(TABLES.risks).select("*").order("created_at",{ascending:false}),
+      supabase.from("audit_schedule").select("*").order("year",{ascending:false}),
     ]);
     // Auto-mark overdue CARs — any non-closed CAR past due date becomes Overdue
     const OVERDUE_ELIGIBLE = ["Open","In Progress"];
@@ -2501,7 +3201,7 @@ export default function App() {
     // Batch all state updates together to prevent intermediate empty renders
     flushSync(()=>{
       setData({
-        cars:processedCars,caps:caps.data||[],verifications:verifs.data||[],
+        cars:processedCars,caps:caps.data||[],verifications:verifs.data||[],auditSchedule:auditSchedule.data||[],
         documents:docs.data||[],flightDocs:fdocs.data||[],audits:audits.data||[],
         contractors:contractors.data||[],changeLog:logs.data||[],
         risks:risks.data||[],
@@ -2516,7 +3216,7 @@ export default function App() {
 
   useEffect(()=>{
     if(!user||loading)return;
-    const tables=["cars","caps","capa_verifications","documents","flight_school_docs","audits","contractors","change_log","risk_register"];
+    const tables=["cars","caps","capa_verifications","documents","flight_school_docs","audits","contractors","change_log","risk_register","audit_schedule"];
     subs.current=tables.map(t=>
       supabase.channel(`rt-${t}`).on("postgres_changes",{event:"*",schema:"public",table:t},()=>loadAll()).subscribe()
     );
@@ -2641,7 +3341,7 @@ export default function App() {
           {activeTab==="cars" && <CARsView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="documents" && <GenericPage title="Documents" subtitle="QMS documents with revision control" table="documents" columns={DOC_COLS} modalFields={DOC_FIELDS} modalTitle="Document" modalDefaults={{status:"Draft",rev:"Rev 1",date:today()}} data={data} canEdit={canEdit} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="flightdocs" && <GenericPage title="Flight School Documents" subtitle="Approvals, certificates and regulatory documents" table="flight_school_docs" columns={FLIGHT_DOC_COLS} modalFields={FLIGHT_DOC_FIELDS} modalTitle="Flight School Document" modalDefaults={{status:"Valid",issue_date:today()}} data={{flight_school_docs:data.flightDocs}} canEdit={isQM} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
-          {activeTab==="audits" && <GenericPage title="Audits" subtitle="Internal, external and supplier audits" table="audits" columns={AUDIT_COLS} modalFields={AUDIT_FIELDS} modalTitle="Audit" modalDefaults={{status:"Scheduled",findings:0,obs:0}} data={data} canEdit={isQM} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
+          {activeTab==="audits" && <AuditsView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="contractors" && <GenericPage title="Contractors" subtitle="Approved contractor register" table="contractors" columns={CONTRACTOR_COLS} modalFields={CONTRACTOR_FIELDS} modalTitle="Contractor" modalDefaults={{status:"Approved",rating:"A"}} data={data} canEdit={isAdmin} canDelete={isAdmin} user={user} profile={profile} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="risks"    && <RiskRegisterView data={data} user={user} profile={profile} managers={managers} onRefresh={loadAll} showToast={showToast}/>}
           {activeTab==="managers" && <ManagersPage managers={managers} onRefresh={loadAll} showToast={showToast} isAdmin={isAdmin}/>}
