@@ -3234,6 +3234,62 @@ const generateNotificationPDF = async (slot) => {
   doc.text(noticeLines, M+3, y+12);
   y += noticeBoxH + 2;
 
+  // ── SECTION 4: ISSUED BY ─────────────────────────────────────
+  const sigW2 = (col-6)/2;
+  y = needPage(y, 34);
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 4 — ISSUED BY — QUALITY MANAGER", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,26,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,26,"S");
+  [["Quality Manager Name & Signature",""],["Date Issued", new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    if(v) doc.text(v, bx, y+10);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+21, bx+sigW2-3, y+21);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+24.5);
+  });
+  y+=30;
+
+  // ── SECTION 5: ACKNOWLEDGEMENT OF RECEIPT ────────────────────
+  y = needPage(y, 58);
+  doc.setFillColor(26,35,50); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 5 — ACKNOWLEDGEMENT OF RECEIPT", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,52,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,52,"S");
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+  doc.text("Please sign below to confirm receipt of this audit notification and your response.", M+3, y+7);
+
+  // Checkboxes
+  doc.setDrawColor(26,35,50); doc.setLineWidth(0.4);
+  doc.rect(M+3, y+14, 5, 5, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(46,125,50);
+  doc.text("ACCEPT", M+10, y+18);
+  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
+  doc.text("— I confirm receipt of this notification and will make all required resources available.", M+28, y+18);
+
+  doc.rect(M+3, y+24, 5, 5, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(198,40,40);
+  doc.text("REJECT", M+10, y+28);
+  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
+  doc.text("— I am unable to accommodate this audit on the planned date. Reason:", M+28, y+28);
+  doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
+  doc.line(M+3, y+34, M+col-3, y+34);
+
+  // Signature lines
+  [["Auditee Name & Signature"],["Date of Acknowledgement"]].forEach(([l], i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setDrawColor(170,190,210); doc.line(bx, y+46, bx+sigW2-3, y+46);
+    doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(140,160,180);
+    doc.text(l, bx, y+49.5);
+  });
+  y+=56;
+
   // ── Attachments — inline embedded ────────────────────────────
   if(slot.attachments && slot.attachments.length>0){
     y = needPage(y, 16);
@@ -3346,62 +3402,6 @@ const generateNotificationPDF = async (slot) => {
       y+=2; // gap between attachments
     }
   }
-
-  // ── SECTION 4: ISSUED BY ─────────────────────────────────────
-  const sigW2 = (col-6)/2;
-  y = needPage(y, 34);
-  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
-  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  doc.text("SECTION 4 — ISSUED BY — QUALITY MANAGER", M+3, y+4.8);
-  y+=9;
-
-  doc.setFillColor(245,248,252); doc.rect(M,y,col,26,"F");
-  doc.setDrawColor(221,227,234); doc.rect(M,y,col,26,"S");
-  [["Quality Manager Name & Signature",""],["Date Issued", new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
-    const bx = M+3+i*(sigW2+3);
-    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
-    if(v) doc.text(v, bx, y+10);
-    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+21, bx+sigW2-3, y+21);
-    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+24.5);
-  });
-  y+=30;
-
-  // ── SECTION 5: ACKNOWLEDGEMENT OF RECEIPT ────────────────────
-  y = needPage(y, 58);
-  doc.setFillColor(26,35,50); doc.rect(M,y,col,7,"F");
-  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  doc.text("SECTION 5 — ACKNOWLEDGEMENT OF RECEIPT", M+3, y+4.8);
-  y+=9;
-
-  doc.setFillColor(245,248,252); doc.rect(M,y,col,52,"F");
-  doc.setDrawColor(221,227,234); doc.rect(M,y,col,52,"S");
-  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-  doc.text("Please sign below to confirm receipt of this audit notification and your response.", M+3, y+7);
-
-  // Checkboxes
-  doc.setDrawColor(26,35,50); doc.setLineWidth(0.4);
-  doc.rect(M+3, y+14, 5, 5, "S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(46,125,50);
-  doc.text("ACCEPT", M+10, y+18);
-  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
-  doc.text("— I confirm receipt of this notification and will make all required resources available.", M+28, y+18);
-
-  doc.rect(M+3, y+24, 5, 5, "S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(198,40,40);
-  doc.text("REJECT", M+10, y+28);
-  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
-  doc.text("— I am unable to accommodate this audit on the planned date. Reason:", M+28, y+28);
-  doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
-  doc.line(M+3, y+34, M+col-3, y+34);
-
-  // Signature lines
-  [["Auditee Name & Signature"],["Date of Acknowledgement"]].forEach(([l], i) => {
-    const bx = M+3+i*(sigW2+3);
-    doc.setDrawColor(170,190,210); doc.line(bx, y+46, bx+sigW2-3, y+46);
-    doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(140,160,180);
-    doc.text(l, bx, y+49.5);
-  });
-  y+=56;
 
   addFooter();
   doc.save(`Audit-Notification-${notifRef}.pdf`);
