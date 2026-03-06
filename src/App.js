@@ -3154,50 +3154,57 @@ const generateNotificationPDF = async (slot) => {
     }
   ];
 
-  // Pre-calculate total height needed for section 2 background
-  const textIndent = M+16; const textW = col-20; const PH=4.5; const titleH=6;
-  let sec2H = 6; // top padding
+  // Pre-calculate total height for Section 2 background before drawing
+  const textIndent = M+16; const textW = col-20;
+  const PH = 4.5;    // line height for 8pt body text
+  const BADGE_H = 6; // height of phase badge/title row
+  const DESC_GAP = 2; // gap between title row and description
+  const PHASE_GAP = 6; // gap between phases
+
+  let sec2H = 5; // top padding
   phases.forEach(phase => {
     doc.setFont("helvetica","normal"); doc.setFontSize(8);
     const ln = doc.splitTextToSize(phase.text, textW);
-    sec2H += titleH + ln.length*PH + 6; // title row + wrapped text + gap
+    sec2H += BADGE_H + DESC_GAP + ln.length * PH + PHASE_GAP;
   });
-  sec2H += 4; // bottom padding
+  sec2H += 3; // bottom padding
 
   y = needPage(y, sec2H + 9);
   doc.setFillColor(0,105,92); doc.rect(M,y,col,7,"F");
   doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
   doc.text("SECTION 2 — PLANNED SEQUENCE OF EVENTS", M+3, y+4.8);
-  y+=9;
+  y += 9;
 
-  // Draw background now that height is known
+  // Draw background with pre-calculated height
   doc.setFillColor(232,245,233); doc.rect(M,y,col,sec2H,"F");
   doc.setDrawColor(200,230,201); doc.setLineWidth(0.3); doc.rect(M,y,col,sec2H,"S");
 
-  let py = y+6;
+  let py = y + 5;
   phases.forEach((phase) => {
-    // Measure wrapped text first
     doc.setFont("helvetica","normal"); doc.setFontSize(8);
     const pLines = doc.splitTextToSize(phase.text, textW);
+    const blockH = BADGE_H + DESC_GAP + pLines.length * PH;
 
-    // Coloured left border stripe
-    doc.setFillColor(...phase.color); doc.rect(M+3, py-1, 2, titleH + pLines.length*PH + 1, "F");
+    // Coloured left accent stripe spanning full block
+    doc.setFillColor(...phase.color);
+    doc.rect(M+3, py, 2, blockH, "F");
 
     // Phase number badge
-    doc.setFillColor(...phase.color); doc.roundedRect(M+7, py, 7, 5.5, 1, 1, "F");
+    doc.setFillColor(...phase.color);
+    doc.roundedRect(M+7, py, 7, 5.5, 1.5, 1.5, "F");
     doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-    doc.text(`${phase.num}`, M+10.5, py+4, {align:"center"});
+    doc.text(phase.num, M+10.5, py + 4, {align:"center"});
 
-    // Phase title on same baseline as badge
+    // Phase title — same row as badge
     doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...phase.color);
-    doc.text(`Phase ${phase.num}: ${phase.title}`, textIndent, py+4);
+    doc.text("Phase " + phase.num + ": " + phase.title, textIndent, py + 4);
 
-    py += titleH;
-
-    // Description indented to match title
+    // Description — new line below badge row
+    py += BADGE_H + DESC_GAP;
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(40,50,65);
     doc.text(pLines, textIndent, py);
-    py += pLines.length * PH + 6;
+
+    py += pLines.length * PH + PHASE_GAP;
   });
 
   y += sec2H + 2;
@@ -3238,60 +3245,61 @@ const generateNotificationPDF = async (slot) => {
     y+=8+slot.attachments.length*6;
   }
 
-  // ── SECTION 4: ACKNOWLEDGEMENT ───────────────────────────────
-  y = needPage(y, 56);
-  doc.setFillColor(26,35,50); doc.rect(M,y,col,7,"F");
+  // ── SECTION 4: ISSUED BY ─────────────────────────────────────
+  const sigW2 = (col-6)/2;
+  y = needPage(y, 34);
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
   doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  doc.text("SECTION 4 — ACKNOWLEDGEMENT OF RECEIPT", M+3, y+4.8);
+  doc.text("SECTION 4 — ISSUED BY — QUALITY MANAGER", M+3, y+4.8);
   y+=9;
 
-  doc.setFillColor(245,248,252); doc.rect(M,y,col,50,"F");
-  doc.setDrawColor(221,227,234); doc.rect(M,y,col,50,"S");
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,26,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,26,"S");
+  [["Quality Manager Name & Signature",""],["Date Issued", new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
+    const bx = M+3+i*(sigW2+3);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    if(v) doc.text(v, bx, y+10);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+21, bx+sigW2-3, y+21);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+24.5);
+  });
+  y+=30;
+
+  // ── SECTION 5: ACKNOWLEDGEMENT OF RECEIPT ────────────────────
+  y = needPage(y, 58);
+  doc.setFillColor(26,35,50); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 5 — ACKNOWLEDGEMENT OF RECEIPT", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,52,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,52,"S");
   doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
   doc.text("Please sign below to confirm receipt of this audit notification and your response.", M+3, y+7);
 
   // Checkboxes
   doc.setDrawColor(26,35,50); doc.setLineWidth(0.4);
-  doc.rect(M+3, y+13, 5, 5, "S");
+  doc.rect(M+3, y+14, 5, 5, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(46,125,50);
-  doc.text("ACCEPT", M+10, y+17);
+  doc.text("ACCEPT", M+10, y+18);
   doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
-  doc.text("— I confirm receipt of this notification and will make all required resources available.", M+28, y+17);
+  doc.text("— I confirm receipt of this notification and will make all required resources available.", M+28, y+18);
 
-  doc.rect(M+3, y+22, 5, 5, "S");
+  doc.rect(M+3, y+24, 5, 5, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(198,40,40);
-  doc.text("REJECT", M+10, y+26);
+  doc.text("REJECT", M+10, y+28);
   doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
-  doc.text("— I am unable to accommodate this audit on the planned date. Reason:", M+28, y+26);
+  doc.text("— I am unable to accommodate this audit on the planned date. Reason:", M+28, y+28);
   doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
-  doc.line(M+3, y+32, M+col-3, y+32);
+  doc.line(M+3, y+34, M+col-3, y+34);
 
-  // Sig lines
-  const sigW2 = (col-6)/2;
-  [["Auditee Name & Signature", ""],["Date of Acknowledgement", ""]].forEach(([l], i) => {
+  // Signature lines
+  [["Auditee Name & Signature"],["Date of Acknowledgement"]].forEach(([l], i) => {
     const bx = M+3+i*(sigW2+3);
-    doc.setDrawColor(170,190,210); doc.line(bx, y+44, bx+sigW2-3, y+44);
+    doc.setDrawColor(170,190,210); doc.line(bx, y+46, bx+sigW2-3, y+46);
     doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(140,160,180);
-    doc.text(l, bx, y+47.5);
+    doc.text(l, bx, y+49.5);
   });
-  y+=54;
-
-  // ── SECTION 5: ISSUED BY ─────────────────────────────────────
-  y = needPage(y, 32);
-  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
-  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  doc.text("SECTION 5 — ISSUED BY", M+3, y+4.8);
-  y+=9;
-
-  doc.setFillColor(245,248,252); doc.rect(M,y,col,24,"F");
-  doc.setDrawColor(221,227,234); doc.rect(M,y,col,24,"S");
-  [["Quality Manager Name & Signature",""],["Date Issued", new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
-    const bx = M+3+i*(sigW2+3);
-    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
-    if(v) doc.text(v, bx, y+10);
-    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+19, bx+sigW2-3, y+19);
-    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+22.5);
-  });
+  y+=56;
 
   addFooter();
   doc.save(`Audit-Notification-${notifRef}.pdf`);
