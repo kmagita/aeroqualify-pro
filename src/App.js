@@ -2480,18 +2480,28 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
   const [findingItems, setFindingItems] = useState(()=>{
     try { return JSON.parse(slot.finding_items||"[]"); } catch { return []; }
   });
+  const [attachments, setAttachments] = useState(()=>{
+    try { return JSON.parse(slot.attachments||"[]"); } catch { return []; }
+  });
+  const addAttachment = async(files) => {
+    const newFiles = Array.from(files).map(f=>({ name:f.name, size:f.size, type:f.type, addedAt:new Date().toISOString() }));
+    setAttachments(p=>[...p,...newFiles]);
+  };
+  const removeAttachment = (idx) => setAttachments(p=>p.filter((_,i)=>i!==idx));
   const addFinding = () => setFindingItems(p=>[...p,{id:Date.now(),ref:"",level:"Level 2 - Minor NC",description:"",clause:"",requirement:"",evidence:"",car_raised:false}]);
   const updateFinding = (id,k,v) => setFindingItems(p=>p.map(f=>f.id===id?{...f,[k]:v}:f));
   const removeFinding = (id) => setFindingItems(p=>p.filter(f=>f.id!==id));
 
   const handleSave = () => {
     const items = JSON.stringify(findingItems);
+    const atts  = JSON.stringify(attachments);
     const level1 = findingItems.filter(f=>f.level.includes("Level 1")||f.level==="Regulatory").length;
     const level2 = findingItems.filter(f=>f.level.includes("Level 2")).length;
     const obs    = findingItems.filter(f=>f.level.includes("Observation")).length;
     onSave({
       ...slot,...form,
       finding_items: items,
+      attachments: atts,
       findings: level1+level2,
       observations: obs,
     });
@@ -2516,7 +2526,7 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
 
         {/* Tabs */}
         <div style={{ display:"flex",borderBottom:"2px solid #eef2f7",background:"#fafbfc",flexShrink:0 }}>
-          {[["details","📋 Details"],["report","📄 Audit Report"],["findings","🔍 Findings ("+findingItems.length+")"]].map(([id,label])=>(
+          {[["details","📋 Details"],["report","📄 Audit Report"],["findings","🔍 Findings ("+findingItems.length+")"],["attachments","📎 Attachments ("+attachments.length+")"]].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)} style={{ padding:"12px 20px",border:"none",borderBottom:tab===id?"3px solid #01579b":"3px solid transparent",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,color:tab===id?"#01579b":"#5f7285",background:"transparent",marginBottom:-2 }}>{label}</button>
           ))}
         </div>
@@ -2673,12 +2683,61 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
               })}
             </div>
           )}
+
+          {/* ── ATTACHMENTS TAB ── */}
+          {tab==="attachments" && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ fontSize:13,color:T.muted }}>Attach checklists, reference documents or supporting materials to this audit.</div>
+                <label style={{ cursor:"pointer" }}>
+                  <input type="file" multiple style={{ display:"none" }} onChange={e=>addAttachment(e.target.files)}/>
+                  <span style={{ background:T.primary,color:"#fff",padding:"7px 14px",borderRadius:8,fontSize:13,fontWeight:600 }}>+ Add Files</span>
+                </label>
+              </div>
+              {attachments.length===0 ? (
+                <label style={{ cursor:"pointer",display:"block" }}>
+                  <input type="file" multiple style={{ display:"none" }} onChange={e=>addAttachment(e.target.files)}/>
+                  <div style={{ padding:40,textAlign:"center",background:"#f5f8fc",borderRadius:10,border:"2px dashed #dde3ea" }}>
+                    <div style={{ fontSize:32,marginBottom:8 }}>📎</div>
+                    <div style={{ fontSize:14,fontWeight:600,color:T.muted,marginBottom:4 }}>No attachments yet</div>
+                    <div style={{ fontSize:12,color:T.muted }}>Click to attach checklists, reference documents or supporting materials</div>
+                  </div>
+                </label>
+              ) : (
+                <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+                  {attachments.map((f,i)=>(
+                    <div key={i} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:"#f5f8fc",border:"1px solid #dde3ea",borderRadius:8,padding:"10px 14px" }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                        <span style={{ fontSize:20 }}>
+                          {f.name&&f.name.endsWith(".pdf")?"📄":f.name&&f.name.match(/\.(doc|docx)$/)?"📝":f.name&&f.name.match(/\.(xls|xlsx)$/)?"📊":"📎"}
+                        </span>
+                        <div>
+                          <div style={{ fontSize:13,fontWeight:600,color:T.primaryDk }}>{f.name}</div>
+                          <div style={{ fontSize:11,color:T.muted }}>{f.size?Math.round(f.size/1024)+"KB":""}{f.addedAt?" · Added "+new Date(f.addedAt).toLocaleDateString("en-GB"):""}</div>
+                        </div>
+                      </div>
+                      <button onClick={()=>removeAttachment(i)} style={{ background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,fontWeight:700,lineHeight:1 }}>✕</button>
+                    </div>
+                  ))}
+                  <label style={{ cursor:"pointer",display:"block" }}>
+                    <input type="file" multiple style={{ display:"none" }} onChange={e=>addAttachment(e.target.files)}/>
+                    <div style={{ padding:"10px 14px",textAlign:"center",background:"#f5f8fc",borderRadius:8,border:"1.5px dashed #dde3ea",fontSize:12,color:T.muted,fontWeight:600 }}>
+                      + Add more files
+                    </div>
+                  </label>
+                </div>
+              )}
+              <div style={{ padding:"10px 14px",background:"#e3f2fd",borderRadius:8,fontSize:12,color:"#01579b",borderLeft:"4px solid #01579b" }}>
+                Attachment names are listed on the printed Audit Notification Form (QMS 002). Save the record to retain the attachment list.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end",padding:"16px 24px",borderTop:"1px solid #eef2f7",background:"#fafbfc",flexShrink:0,flexWrap:"wrap" }}>
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn variant="ghost" onClick={()=>generateNotificationPDF({...slot,...form})}>🔔 Notification Form</Btn>
+          <Btn variant="ghost" onClick={()=>generateNotificationPDF({...slot,...form,attachments})}>🔔 Notification Form</Btn>
           {slot.status==="Completed"&&<Btn variant="ghost" onClick={()=>generateAuditReport({...slot,...form,finding_items:JSON.stringify(findingItems)})}>📄 Audit Report PDF</Btn>}
           <Btn onClick={handleSave}>💾 Save Audit Record</Btn>
         </div>
@@ -2999,7 +3058,23 @@ const generateNotificationPDF = async (slot) => {
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
   const W=210; const M=14; const col=W-M*2;
 
-  // Header
+  const addFooter = () => {
+    const pages = doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,285,W-M,285);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
+      doc.text(`Pegasus Flyers (E.A.) Ltd. · QMS 002 · Audit Notification · Ref: ${notifRef}`, M, 289);
+      doc.text(`CONTROLLED DOCUMENT  ·  Page ${i} of ${pages}`, W-M, 289, {align:"right"});
+    }
+  };
+
+  const FOOTER_Y = 276; const NEW_PAGE_Y = 20;
+  const notifRef = `ANF-${slot.year}-${String(slot.month).padStart(2,"0")}-${String(slot.slot).padStart(2,"0")}`;
+
+  const needPage = (cy, need=20) => { if(cy+need>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; } return cy; };
+
+  // ── Header ───────────────────────────────────────────────────
   doc.setFillColor(26,35,50); doc.rect(0,0,W,28,"F");
   doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(255,255,255);
   doc.text("AeroQualify Pro", M, 11);
@@ -3011,15 +3086,15 @@ const generateNotificationPDF = async (slot) => {
 
   let y = 34;
 
-  // Ref number bar
+  // ── Ref bar ──────────────────────────────────────────────────
   doc.setFillColor(1,87,155); doc.rect(M,y,col,10,"F");
   doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(255,255,255);
-  const notifRef = `ANF-${slot.year}-${String(slot.month).padStart(2,"0")}-${String(slot.slot).padStart(2,"0")}`;
   doc.text(`Notification Reference: ${notifRef}`, M+3, y+6.5);
   doc.text(`${slot.area}`, W-M-3, y+6.5, {align:"right"});
   y += 14;
 
-  const box = (label, value, x, bY, w, h) => {
+  const hw = (col-2)/2;
+  const drawBox = (label, value, x, bY, w, h) => {
     doc.setFillColor(245,248,252); doc.rect(x,bY,w,h,"F");
     doc.setDrawColor(221,227,234); doc.rect(x,bY,w,h,"S");
     doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
@@ -3029,86 +3104,173 @@ const generateNotificationPDF = async (slot) => {
     doc.text(lines, x+2.5, bY+9);
     return bY+h+2;
   };
+  const halfBox = (label, value, x, bY) => {
+    doc.setFillColor(245,248,252); doc.rect(x,bY,hw,14,"F");
+    doc.setDrawColor(221,227,234); doc.rect(x,bY,hw,14,"S");
+    doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133);
+    doc.text(label.toUpperCase(), x+2.5, bY+4);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    doc.text(String(value||"TBC"), x+2.5, bY+9);
+  };
 
-  const hw = (col-2)/2;
-  // Row 1
-  box("Audit Area", slot.area, M, y, col, 14); y+=16;
-  doc.setFillColor(245,248,252); doc.rect(M,y,hw,14,"F"); doc.setDrawColor(221,227,234); doc.rect(M,y,hw,14,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("AUDIT TYPE", M+2.5,y+4);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.audit_type||"Internal", M+2.5,y+9);
-  doc.setFillColor(245,248,252); doc.rect(M+hw+2,y,hw,14,"F"); doc.rect(M+hw+2,y,hw,14,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("AUDIT REF / SLOT", M+hw+4.5,y+4);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(`${slot.year} — Slot #${slot.slot}`, M+hw+4.5,y+9);
-  y+=16;
-  doc.setFillColor(245,248,252); doc.rect(M,y,hw,14,"F"); doc.rect(M,y,hw,14,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("PLANNED DATE", M+2.5,y+4);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.planned_date||"TBC", M+2.5,y+9);
-  doc.setFillColor(245,248,252); doc.rect(M+hw+2,y,hw,14,"F"); doc.rect(M+hw+2,y,hw,14,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("LEAD AUDITOR", M+hw+4.5,y+4);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.lead_auditor||"TBC", M+hw+4.5,y+9);
-  y+=16;
-  doc.setFillColor(245,248,252); doc.rect(M,y,hw,14,"F"); doc.rect(M,y,hw,14,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("OPENING BRIEF", M+2.5,y+4);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.opening_brief||"TBC", M+2.5,y+9);
-  doc.setFillColor(245,248,252); doc.rect(M+hw+2,y,hw,14,"F"); doc.rect(M+hw+2,y,hw,14,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(95,114,133); doc.text("CLOSING BRIEF", M+hw+4.5,y+4);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50); doc.text(slot.closing_brief||"TBC", M+hw+4.5,y+9);
-  y+=16;
-  box("Audit Criteria / Reference Documents", slot.audit_criteria||"AS9100D / KCAA ANO / Quality Manual", M, y, col, 14); y+=16;
-  box("Scope of Audit", slot.notes||"As per Annual Audit Programme", M, y, col, 20); y+=22;
+  // ── SECTION 1: AUDIT DETAILS ─────────────────────────────────
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 1 — AUDIT DETAILS", M+3, y+4.8);
+  y+=9;
 
-  // Notice text
-  doc.setFillColor(227,242,253); doc.rect(M,y,col,18,"F");
-  doc.setDrawColor(144,202,249); doc.rect(M,y,col,18,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(1,87,155);
-  doc.text("NOTICE TO AUDITEE", M+3, y+5.5);
+  drawBox("Audit Area", slot.area, M, y, col, 14); y+=16;
+  halfBox("Audit Type", slot.audit_type||"Internal", M, y);
+  halfBox("Audit Ref / Slot", `${slot.year} — Slot #${slot.slot}`, M+hw+2, y);
+  y+=16;
+  halfBox("Planned Date", slot.planned_date||"TBC", M, y);
+  halfBox("Lead Auditor", slot.lead_auditor||"TBC", M+hw+2, y);
+  y+=16;
+  halfBox("Opening Brief", slot.opening_brief||"TBC", M, y);
+  halfBox("Closing Brief", slot.closing_brief||"TBC", M+hw+2, y);
+  y+=16;
+  drawBox("Audit Criteria / Reference Documents", slot.audit_criteria||"AS9100D / KCAA ANO / Quality Manual", M, y, col, 14); y+=16;
+  drawBox("Scope of Audit", slot.notes||"As per Annual Audit Programme", M, y, col, 18); y+=20;
+
+  // ── SECTION 2: PLANNED SEQUENCE OF EVENTS ───────────────────
+  y = needPage(y, 65);
+  doc.setFillColor(0,105,92); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 2 — PLANNED SEQUENCE OF EVENTS", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(232,245,233); doc.rect(M,y,col,52,"F");
+  doc.setDrawColor(200,230,201); doc.rect(M,y,col,52,"S");
+
+  const phases = [
+    {
+      num:"1",
+      title:"Data Gathering and Review",
+      color:[46,125,50],
+      text:"Prior to the on-site audit, the lead auditor will conduct a desktop review of all relevant documentation, records, manuals and previous audit findings pertaining to the audit area. This phase includes review of applicable regulatory requirements, quality manual provisions and any outstanding corrective actions."
+    },
+    {
+      num:"2",
+      title:"On-Site Audit",
+      color:[1,87,155],
+      text:"The lead auditor will conduct the on-site inspection of the audit area, interviewing relevant personnel, observing processes and verifying objective evidence against established criteria. An opening brief will be held at the start and a closing brief at the conclusion of the on-site phase to discuss preliminary findings."
+    },
+    {
+      num:"3",
+      title:"Analysis and Issuance of Corrective Action Requests",
+      color:[183,28,28],
+      text:"Following the on-site audit, all findings will be analysed and classified as Level 1 (Major Non-Conformance), Level 2 (Minor Non-Conformance) or Observation. Formal Corrective Action Requests (CARs) will be issued to the Responsible Manager for all non-conformances identified, with due dates assigned in accordance with severity."
+    }
+  ];
+
+  let py = y+5;
+  phases.forEach((phase) => {
+    // Phase number circle
+    doc.setFillColor(...phase.color);
+    doc.circle(M+7, py+3.5, 4, "F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(255,255,255);
+    doc.text(phase.num, M+7, py+5.5, {align:"center"});
+    // Phase title
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...phase.color);
+    doc.text(`Phase ${phase.num}: ${phase.title}`, M+14, py+5);
+    py+=9;
+    // Phase description
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+    const pLines = doc.splitTextToSize(phase.text, col-18);
+    doc.text(pLines, M+14, py);
+    py += pLines.length*4+5;
+  });
+  y += 54;
+
+  // ── SECTION 3: NOTICE TO AUDITEE ─────────────────────────────
+  y = needPage(y, 28);
+  doc.setFillColor(245,127,23); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 3 — NOTICE TO AUDITEE", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(255,243,224); doc.rect(M,y,col,18,"F");
+  doc.setDrawColor(255,204,128); doc.rect(M,y,col,18,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(230,81,0);
+  doc.text("Important Notice", M+3, y+6);
   doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-  const notice = "This notification is issued at least 7 days prior to the scheduled audit date in accordance with the Quality Manual. Please ensure all relevant records, documentation and personnel are available on the date of audit. Your cooperation is required and expected.";
+  const notice = "This notification is issued at least 7 days prior to the scheduled audit date in accordance with the Quality Manual. Please ensure all relevant records, documentation and personnel are available on the date of audit. This audit is a mandatory quality assurance activity. Your full cooperation is required and expected.";
   const noticeLines = doc.splitTextToSize(notice, col-6);
-  doc.text(noticeLines, M+3, y+10);
+  doc.text(noticeLines, M+3, y+11);
   y+=22;
 
-  // Acknowledgement section
-  doc.setFillColor(245,248,252); doc.rect(M,y,col,48,"F");
-  doc.setDrawColor(221,227,234); doc.rect(M,y,col,48,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-  doc.text("ACKNOWLEDGEMENT", M+3, y+7);
+  // ── Attachments list ─────────────────────────────────────────
+  if(slot.attachments && slot.attachments.length>0){
+    y = needPage(y, 20);
+    doc.setFillColor(69,39,160); doc.rect(M,y,col,7,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text("ATTACHMENTS", M+3, y+4.8);
+    y+=9;
+    doc.setFillColor(245,248,252); doc.rect(M,y,col,6+slot.attachments.length*6,"F");
+    doc.setDrawColor(221,227,234); doc.rect(M,y,col,6+slot.attachments.length*6,"S");
+    slot.attachments.forEach((f,i)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
+      doc.text(`${i+1}. ${f.name}`, M+4, y+5+i*6);
+    });
+    y+=8+slot.attachments.length*6;
+  }
+
+  // ── SECTION 4: ACKNOWLEDGEMENT ───────────────────────────────
+  y = needPage(y, 56);
+  doc.setFillColor(26,35,50); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 4 — ACKNOWLEDGEMENT OF RECEIPT", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,50,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,50,"S");
   doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-  doc.text("Please sign below to confirm receipt of this audit notification.", M+3, y+13);
-  // Accept / Reject checkboxes
+  doc.text("Please sign below to confirm receipt of this audit notification and your response.", M+3, y+7);
+
+  // Checkboxes
   doc.setDrawColor(26,35,50); doc.setLineWidth(0.4);
-  doc.rect(M+3, y+18, 5, 5, "S"); doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.text("Accept — I confirm I have received this notification and will make required resources available.", M+10, y+22);
-  doc.rect(M+3, y+26, 5, 5, "S"); doc.text("Reject — I am unable to accommodate this audit. Reason:", M+10, y+30);
-  doc.setDrawColor(170,190,210); doc.line(M+80, y+30, M+col-3, y+30);
-  // Sig line
+  doc.rect(M+3, y+13, 5, 5, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(46,125,50);
+  doc.text("ACCEPT", M+10, y+17);
+  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
+  doc.text("— I confirm receipt of this notification and will make all required resources available.", M+28, y+17);
+
+  doc.rect(M+3, y+22, 5, 5, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(198,40,40);
+  doc.text("REJECT", M+10, y+26);
+  doc.setFont("helvetica","normal"); doc.setTextColor(26,35,50);
+  doc.text("— I am unable to accommodate this audit on the planned date. Reason:", M+28, y+26);
+  doc.setDrawColor(170,190,210); doc.setLineWidth(0.3);
+  doc.line(M+3, y+32, M+col-3, y+32);
+
+  // Sig lines
   const sigW2 = (col-6)/2;
-  [["Auditee Signature & Name",""],["Date",""]].forEach(([l],i) => {
+  [["Auditee Name & Signature", ""],["Date of Acknowledgement", ""]].forEach(([l], i) => {
     const bx = M+3+i*(sigW2+3);
-    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+44, bx+sigW2-3, y+44);
+    doc.setDrawColor(170,190,210); doc.line(bx, y+44, bx+sigW2-3, y+44);
     doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(140,160,180);
     doc.text(l, bx, y+47.5);
   });
-  y+=52;
+  y+=54;
 
-  // Issued by
-  doc.setFillColor(245,248,252); doc.rect(M,y,col,28,"F");
-  doc.setDrawColor(221,227,234); doc.rect(M,y,col,28,"S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-  doc.text("ISSUED BY — QUALITY MANAGER", M+3, y+7);
-  [["Quality Manager Name",""],["Date Issued",new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
+  // ── SECTION 5: ISSUED BY ─────────────────────────────────────
+  y = needPage(y, 32);
+  doc.setFillColor(1,87,155); doc.rect(M,y,col,7,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+  doc.text("SECTION 5 — ISSUED BY", M+3, y+4.8);
+  y+=9;
+
+  doc.setFillColor(245,248,252); doc.rect(M,y,col,24,"F");
+  doc.setDrawColor(221,227,234); doc.rect(M,y,col,24,"S");
+  [["Quality Manager Name & Signature",""],["Date Issued", new Date().toLocaleDateString("en-GB")]].forEach(([l,v],i) => {
     const bx = M+3+i*(sigW2+3);
-    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(26,35,50);
-    doc.text(v, bx, y+15);
-    doc.setDrawColor(170,190,210); doc.line(bx, y+22, bx+sigW2-3, y+22);
-    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+25.5);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(26,35,50);
+    if(v) doc.text(v, bx, y+10);
+    doc.setDrawColor(170,190,210); doc.setLineWidth(0.3); doc.line(bx, y+19, bx+sigW2-3, y+19);
+    doc.setFontSize(6.5); doc.setTextColor(140,160,180); doc.text(l, bx, y+22.5);
   });
 
-  // Footer
-  doc.setDrawColor(221,227,234); doc.setLineWidth(0.3); doc.line(M,285,W-M,285);
-  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,180);
-  doc.text(`Pegasus Flyers (E.A.) Ltd. · QMS 002 · Audit Notification · Ref: ${notifRef}`, M, 289);
-  doc.text("CONTROLLED DOCUMENT", W-M, 289, {align:"right"});
-
+  addFooter();
   doc.save(`Audit-Notification-${notifRef}.pdf`);
 };
 
