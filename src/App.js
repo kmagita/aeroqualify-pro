@@ -484,17 +484,65 @@ const Dashboard = ({ data }) => {
 };
 
 // ─── CAR Form Modal ───────────────────────────────────────────
-const CARModal = ({ car, managers, onSave, onClose }) => {
+const AREA_CODES_CAR = {
+  "Ground School Training":"007","Flight Training Records":"008",
+  "Company Manuals & Documents":"009","Base Training Facilities":"010",
+  "Aircraft":"011","AMO":"012","Management Personnel Records":"013",
+  "Ground & Flight Instructor Records":"014","Quality Management":"016",
+  "Safety Management Systems":"017","Fuel Supplier":"022",
+};
+const getAuditRef = (slot) => {
+  const code = AREA_CODES_CAR[slot.area]||"000";
+  const d = slot.planned_date ? new Date(slot.planned_date) : new Date(slot.year,(slot.month||1)-1,1);
+  const dd=String(d.getDate()).padStart(2,"0"), mm=String(d.getMonth()+1).padStart(2,"0"), yyyy=d.getFullYear();
+  return `PGF-QMS-${code}-${dd}${mm}${yyyy}`;
+};
+
+const CARModal = ({ car, managers, onSave, onClose, allCars, auditSchedule }) => {
+  const [selectedAuditId, setSelectedAuditId] = useState(car?.audit_ref||"");
+  const auditRef = selectedAuditId || car?.audit_ref || "";
+
+  // Count existing CARs linked to this audit ref to get next CAPA number
+  const existingCount = (allCars||[]).filter(c=>c.audit_ref===auditRef && (!car || c.id!==car.id)).length;
+  const nextNum = existingCount + 1;
+  const autoId = auditRef
+    ? `${auditRef}-CAPA-${String(nextNum).padStart(3,"0")}`
+    : `CAR-${String(Date.now()).slice(-6)}`;
+
   const [form, setForm] = useState(car || {
-    id:`CAR-${String(Date.now()).slice(-6)}`, status:"Open",
+    id: autoId, status:"Open",
     severity:"Minor", date_raised:today(),
+    audit_ref: auditRef,
   });
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // When audit selection changes, update both audit_ref and id
+  const handleAuditChange = (slotId) => {
+    setSelectedAuditId(slotId);
+    if(!slotId){ set("audit_ref",""); set("id",`CAR-${String(Date.now()).slice(-6)}`); return; }
+    const slot = (auditSchedule||[]).find(s=>s.id===slotId);
+    if(!slot) return;
+    const ref = getAuditRef(slot);
+    const count = (allCars||[]).filter(c=>c.audit_ref===ref && (!car||c.id!==car.id)).length;
+    const num = String(count+1).padStart(3,"0");
+    set("audit_ref", ref);
+    set("id", `${ref}-CAPA-${num}`);
+  };
+
+  // Sorted audit schedule for dropdown — most recent first
+  const auditOptions = [...(auditSchedule||[])].sort((a,b)=>b.year-a.year||b.month-a.month);
   return (
     <ModalShell title={car?"Edit CAR":"Raise New CAR"} onClose={onClose} wide>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Select label="Link to Audit (optional)" value={selectedAuditId} onChange={e=>handleAuditChange(e.target.value)}>
+            <option value="">— Standalone CAR (not linked to audit) —</option>
+            {auditOptions.map(s=><option key={s.id} value={s.id}>{getAuditRef(s)} · {s.area} · {s.year}</option>)}
+          </Select>
+        </div>
         <Input label="CAR Number" value={form.id||""} onChange={e=>set("id",e.target.value)} />
         <Input label="Date Raised" type="date" value={form.date_raised||""} onChange={e=>set("date_raised",e.target.value)} />
+        {form.audit_ref&&<div style={{ gridColumn:"1/-1" }}><Input label="Audit Reference" value={form.audit_ref} readOnly style={{ background:"#f5f8fc",color:"#5f7285",fontFamily:"monospace" }} /></div>}
         <div style={{ gridColumn:"1/-1" }}>
           <Textarea label="Description of Finding" rows={4} value={form.finding_description||""} onChange={e=>set("finding_description",e.target.value)} />
         </div>
@@ -1652,7 +1700,7 @@ const CARsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
         </table>
       </div>
 
-      {modal==="car"&&<CARModal car={selected} managers={managers} onSave={saveCar} onClose={()=>setModal(null)} />}
+      {modal==="car"&&<CARModal car={selected} managers={managers} onSave={saveCar} onClose={()=>setModal(null)} allCars={data.cars||[]} auditSchedule={data.auditSchedule||[]} />}
       {modal==="cap"&&selected&&<CAPModal car={selected} cap={getCAP(selected.id)} onSave={saveCap} onClose={()=>setModal(null)} />}
       {modal==="verify"&&selected&&<VerificationModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} onSave={saveVerification} onClose={()=>setModal(null)} />}
       {modal==="detail"&&selected&&<CAPADetailModal car={selected} cap={getCAP(selected.id)} verif={getVerif(selected.id)} allCaps={getAllCAPs(selected.id)} allVerifs={getAllVerifs(selected.id)} onPDF={()=>generateReport(selected)} onClose={()=>setModal(null)} />}
@@ -2451,7 +2499,7 @@ const AUDIT_TYPES = ["Internal","Supplier","External","Regulatory","Surveillance
 
 const FINDING_LEVELS = ["Level 1 - Major NC","Level 2 - Minor NC","Level 3 - Observation","Repeat Finding","Regulatory"];
 
-const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
+const AuditScheduleModal = ({ slot, onSave, onClose, managers, data, user, profile, showToast, onRefresh }) => {
   const [tab, setTab] = useState("details");
   const [form, setForm] = useState({
     lead_auditor:     slot.lead_auditor||"",
@@ -2493,9 +2541,55 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
     setAttachments(p=>[...p,...newFiles]);
   };
   const removeAttachment = (idx) => setAttachments(p=>p.filter((_,i)=>i!==idx));
-  const addFinding = () => setFindingItems(p=>[...p,{id:Date.now(),ref:"",level:"Level 2 - Minor NC",description:"",clause:"",requirement:"",evidence:"",car_raised:false}]);
+  const addFinding = () => setFindingItems(p=>[...p,{id:Date.now(),ref:"",level:"Level 2 - Minor NC",description:"",clause:"",requirement:"",evidence:"",car_raised:false,car_id:""}]);
   const updateFinding = (id,k,v) => setFindingItems(p=>p.map(f=>f.id===id?{...f,[k]:v}:f));
   const removeFinding = (id) => setFindingItems(p=>p.filter(f=>f.id!==id));
+
+  // ── CAR raising from findings ──────────────────────────────
+  const [carModal, setCarModal] = useState(null); // { finding } | null
+
+  const auditRef = (() => {
+    const AREA_CODES_AM = {
+      "Ground School Training":"007","Flight Training Records":"008",
+      "Company Manuals & Documents":"009","Base Training Facilities":"010",
+      "Aircraft":"011","AMO":"012","Management Personnel Records":"013",
+      "Ground & Flight Instructor Records":"014","Quality Management":"016",
+      "Safety Management Systems":"017","Fuel Supplier":"022",
+    };
+    const code = AREA_CODES_AM[slot.area]||"000";
+    const d = slot.planned_date ? new Date(slot.planned_date) : new Date(slot.year,(slot.month||1)-1,1);
+    const dd=String(d.getDate()).padStart(2,"0"), mm=String(d.getMonth()+1).padStart(2,"0"), yyyy=d.getFullYear();
+    return `PGF-QMS-${code}-${dd}${mm}${yyyy}`;
+  })();
+
+  const saveCarFromFinding = async (carForm, findingId) => {
+    const payload = {
+      ...carForm,
+      title: carForm.finding_description?.slice(0,80)||carForm.id,
+      raised_by: user?.id,
+      raised_by_name: profile?.full_name||user?.email,
+      updated_at: new Date().toISOString(),
+    };
+    const extraEmails = (carForm.additional_notify_text||"").split(",").map(s=>s.trim()).filter(Boolean);
+    delete payload.additional_notify_text;
+    const { error } = await supabase.from(TABLES.cars).insert(payload);
+    if(error){ showToast?.(`Error: ${error.message}`,"error"); return; }
+    // Log to change log
+    await logChange({ user, action:"created", table:"cars", recordId:carForm.id, recordTitle:payload.title, newData:carForm });
+    // Send notification to responsible manager — same as standalone CAR
+    const carRm = managers.find(m=>m.role_title===carForm.responsible_manager);
+    await sendNotification({
+      type: "car_raised",
+      record: { ...carForm, raised_by_name: profile?.full_name||user?.email },
+      recipients: [carRm?.email, ...extraEmails].filter(Boolean),
+    });
+    // Mark finding as CAR raised and store the CAR id
+    updateFinding(findingId, "car_raised", true);
+    updateFinding(findingId, "car_id", carForm.id);
+    showToast?.(`CAR ${carForm.id} raised — responsible manager notified`,"success");
+    setCarModal(null);
+    onRefresh?.();
+  };
 
   const handleSave = () => {
     const items = JSON.stringify(findingItems);
@@ -2659,10 +2753,10 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
                         </select>
                       </div>
                       <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                        <label style={{ display:"flex",alignItems:"center",gap:4,fontSize:11,color:lc.text,fontWeight:600,cursor:"pointer" }}>
-                          <input type="checkbox" checked={f.car_raised} onChange={e=>updateFinding(f.id,"car_raised",e.target.checked)}/>
-                          CAR Raised
-                        </label>
+                        {f.car_raised && f.car_id
+                          ? <span style={{ fontFamily:"monospace",fontSize:10,fontWeight:700,background:"#e8f5e9",color:"#2e7d32",border:"1px solid #a5d6a7",borderRadius:5,padding:"2px 7px" }}>✓ {f.car_id}</span>
+                          : <button onClick={()=>setCarModal({finding:f})} style={{ fontSize:11,fontWeight:700,color:"#01579b",background:"#e3f2fd",border:"1px solid #90caf9",borderRadius:6,padding:"3px 10px",cursor:"pointer" }}>+ Raise CAR</button>
+                        }
                         <button onClick={()=>removeFinding(f.id)} style={{ background:"none",border:"none",color:lc.text,cursor:"pointer",fontSize:16,fontWeight:700 }}>✕</button>
                       </div>
                     </div>
@@ -2748,6 +2842,34 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers }) => {
         </div>
       </div>
     </div>
+
+    {/* CAR Modal — raised from a finding */}
+    {carModal&&(()=>{
+      const f = carModal.finding;
+      // Count existing CARs for this audit ref to get next CAPA number
+      const existing = (data?.cars||[]).filter(c=>c.audit_ref===auditRef).length;
+      const nextN = String(existing+1).padStart(3,"0");
+      const levelSeverity = f.level.includes("Level 1")||f.level==="Regulatory" ? "Major" : f.level.includes("Observation") ? "Minor" : "Minor";
+      const preFilled = {
+        id: `${auditRef}-CAPA-${nextN}`,
+        audit_ref: auditRef,
+        status: "Open",
+        severity: levelSeverity,
+        date_raised: today(),
+        finding_description: f.description,
+        qms_clause: f.clause||"",
+      };
+      return (
+        <CARModal
+          car={preFilled}
+          managers={managers}
+          allCars={data?.cars||[]}
+          auditSchedule={data?.auditSchedule||[]}
+          onSave={(carForm)=>saveCarFromFinding(carForm, f.id)}
+          onClose={()=>setCarModal(null)}
+        />
+      );
+    })()}
   );
 };
 
@@ -3075,7 +3197,32 @@ const generateNotificationPDF = async (slot) => {
   };
 
   const FOOTER_Y = 276; const NEW_PAGE_Y = 20;
-  const notifRef = `ANF-${slot.year}-${String(slot.month).padStart(2,"0")}-${String(slot.slot).padStart(2,"0")}`;
+
+  // Area code lookup — PGF-QMS-XXX
+  const AREA_CODES = {
+    "Ground School Training"       : "007",
+    "Flight Training Records"      : "008",
+    "Company Manuals & Documents"  : "009",
+    "Base Training Facilities"     : "010",
+    "Aircraft"                     : "011",
+    "AMO"                          : "012",
+    "Management Personnel Records" : "013",
+    "Ground & Flight Instructor Records": "014",
+    "Quality Management"           : "016",
+    "Safety Management Systems"    : "017",
+    "Fuel Supplier"                : "022",
+  };
+  const areaCode = AREA_CODES[slot.area] || "000";
+
+  // Date of scheduled audit — use planned_date if set, else derive from month/year
+  const auditDateObj = slot.planned_date
+    ? new Date(slot.planned_date)
+    : new Date(slot.year, (slot.month || 1) - 1, 1);
+  const dd   = String(auditDateObj.getDate()).padStart(2,"0");
+  const mm   = String(auditDateObj.getMonth()+1).padStart(2,"0");
+  const yyyy = auditDateObj.getFullYear();
+
+  const notifRef = `PGF-QMS-${areaCode}-${dd}${mm}${yyyy}`;
 
   const needPage = (cy, need=20) => { if(cy+need>FOOTER_Y){ doc.addPage(); return NEW_PAGE_Y; } return cy; };
 
@@ -3925,7 +4072,7 @@ Planned: ${slot.planned_date||"Not set"}`}
           onClose={()=>setAdHocModal(false)}
         />
       )}
-      {modal&&<AuditScheduleModal slot={modal} onSave={saveSlot} onClose={()=>setModal(null)} managers={managers}/>}
+      {modal&&<AuditScheduleModal slot={modal} onSave={saveSlot} onClose={()=>setModal(null)} managers={managers} data={data} user={user} profile={profile} showToast={showToast} onRefresh={onRefresh}/>}
 
       {/* Password Gate Modal */}
       {pwModal&&(
