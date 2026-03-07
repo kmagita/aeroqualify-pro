@@ -3744,6 +3744,7 @@ const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => 
               {isQM&&<Btn onClick={handleGenerateClick} disabled={generating}>{generating?"Generating...":"⚡ Generate "+year+" Audit Schedule"}</Btn>}
             </div>
           ) : (
+            <>
             <table style={{ width:"100%",borderCollapse:"collapse" }}>
               <thead>
                 <tr style={{ background:"#1a2332" }}>
@@ -3847,6 +3848,7 @@ Planned: ${slot.planned_date||"Not set"}`}
                 </table>
               </div>
             )}
+            </>
           )}
         </div>
       )}
