@@ -2611,6 +2611,7 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers, data, user, profi
   const sectionStyle = { borderTop:"2px solid #eef2f7",paddingTop:16,marginTop:4 };
 
   return (
+    <>
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
       <div style={{ background:"#fff",borderRadius:14,width:720,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 8px 50px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
 
@@ -2842,14 +2843,11 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers, data, user, profi
         </div>
       </div>
     </div>
-
-    {/* CAR Modal — raised from a finding */}
     {carModal&&(()=>{
       const f = carModal.finding;
-      // Count existing CARs for this audit ref to get next CAPA number
       const existing = (data?.cars||[]).filter(c=>c.audit_ref===auditRef).length;
       const nextN = String(existing+1).padStart(3,"0");
-      const levelSeverity = f.level.includes("Level 1")||f.level==="Regulatory" ? "Major" : f.level.includes("Observation") ? "Minor" : "Minor";
+      const levelSeverity = f.level.includes("Level 1")||f.level==="Regulatory" ? "Major" : "Minor";
       const preFilled = {
         id: `${auditRef}-CAPA-${nextN}`,
         audit_ref: auditRef,
@@ -2870,6 +2868,7 @@ const AuditScheduleModal = ({ slot, onSave, onClose, managers, data, user, profi
         />
       );
     })()}
+  </>
   );
 };
 
