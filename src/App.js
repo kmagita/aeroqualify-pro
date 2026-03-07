@@ -3407,6 +3407,180 @@ const generateNotificationPDF = async (slot) => {
   doc.save(`Audit-Notification-${notifRef}.pdf`);
 };
 
+// ─── Ad-Hoc Audit Modal ───────────────────────────────────────
+const ADHOC_TRIGGERS = [
+  "Internal Concern / Observation",
+  "External Audit Outcome",
+  "Customer / Stakeholder Complaint",
+  "Regulatory Directive",
+  "Incident or Occurrence",
+  "Management Request",
+  "Repeat Non-Conformance",
+  "Other",
+];
+
+const AdHocAuditModal = ({ year, existingSlots, onSave, onClose }) => {
+  const [form, setForm] = useState({
+    area: AUDIT_AREAS[0],
+    custom_area: "",
+    use_custom: false,
+    trigger: ADHOC_TRIGGERS[0],
+    trigger_detail: "",
+    audit_type: "Internal",
+    lead_auditor: "",
+    planned_date: "",
+    opening_brief: "",
+    closing_brief: "",
+    audit_criteria: "AS9100D / KCAA ANO / Quality Manual",
+    notes: "",
+    month: new Date().getMonth()+1,
+  });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const area = form.use_custom ? form.custom_area.trim() : form.area;
+    if(!area){ alert("Please specify an audit area."); return; }
+    setSaving(true);
+    // Generate a unique ID that won't clash with scheduled slots
+    const ts = Date.now();
+    const id = "AS-ADHOC-" + year + "-" + area.replace(/\s+/g,"-").substring(0,20) + "-" + ts;
+    const slot = {
+      id, year: Number(year), area, slot: 99, month: Number(form.month),
+      status: "Scheduled", findings: 0, observations: 0,
+      ad_hoc: true,
+      trigger: form.trigger,
+      trigger_detail: form.trigger_detail,
+      audit_type: form.audit_type,
+      lead_auditor: form.lead_auditor,
+      planned_date: form.planned_date||null,
+      opening_brief: form.opening_brief,
+      closing_brief: form.closing_brief,
+      audit_criteria: form.audit_criteria,
+      notes: form.notes,
+      finding_items: "[]",
+      attachments: "[]",
+    };
+    await onSave(slot);
+    setSaving(false);
+  };
+
+  const inputStyle = { width:"100%",padding:"8px 10px",border:"1.5px solid #dde3ea",borderRadius:8,fontSize:13,boxSizing:"border-box",background:"#fff" };
+  const labelStyle = { fontSize:11,fontWeight:700,color:"#5f7285",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4 };
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={onClose}>
+      <div style={{ background:"#fff",borderRadius:14,width:560,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 8px 50px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column" }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ background:"linear-gradient(135deg,#e65100,#f57f17)",padding:"18px 24px",borderRadius:"14px 14px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
+          <div>
+            <div style={{ color:"rgba(255,255,255,0.75)",fontSize:11,textTransform:"uppercase",letterSpacing:1 }}>Unscheduled / Trigger-Based</div>
+            <div style={{ color:"#fff",fontWeight:700,fontSize:17 }}>Add Ad-Hoc Audit — {year}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.75)",fontSize:22,cursor:"pointer" }}>✕</button>
+        </div>
+
+        <div style={{ padding:24,display:"flex",flexDirection:"column",gap:14,overflowY:"auto" }}>
+
+          {/* Trigger banner */}
+          <div style={{ padding:"12px 16px",background:"#fff3e0",borderRadius:8,borderLeft:"4px solid #f57f17",fontSize:12,color:"#e65100" }}>
+            <strong>Ad-hoc audits</strong> are unscheduled audits triggered by a specific event or concern outside the annual programme. They will appear in the schedule marked <strong>AD-HOC</strong> and are fully tracked through the same audit workflow.
+          </div>
+
+          {/* Trigger */}
+          <div style={{ borderBottom:"1px solid #eef2f7",paddingBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:"#1a2332",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5 }}>Trigger / Reason</div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+              <div style={{ gridColumn:"1/-1" }}>
+                <label style={labelStyle}>Trigger Category</label>
+                <select value={form.trigger} onChange={e=>set("trigger",e.target.value)} style={inputStyle}>
+                  {ADHOC_TRIGGERS.map(t=><option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn:"1/-1" }}>
+                <label style={labelStyle}>Trigger Detail / Reference</label>
+                <textarea value={form.trigger_detail} onChange={e=>set("trigger_detail",e.target.value)} rows={2} placeholder="e.g. Customer complaint ref CC-2026-04, KCAA finding ref XYZ, incident report..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Audit area */}
+          <div style={{ borderBottom:"1px solid #eef2f7",paddingBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:"#1a2332",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5 }}>Audit Area</div>
+            <div style={{ display:"flex",gap:10,marginBottom:10 }}>
+              {[false,true].map(v=>(
+                <label key={String(v)} style={{ display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",fontWeight:form.use_custom===v?700:400,color:form.use_custom===v?T.primaryDk:T.muted }}>
+                  <input type="radio" checked={form.use_custom===v} onChange={()=>set("use_custom",v)} style={{ accentColor:T.primary }}/>
+                  {v?"Custom area":"Standard area"}
+                </label>
+              ))}
+            </div>
+            {!form.use_custom
+              ? <select value={form.area} onChange={e=>set("area",e.target.value)} style={inputStyle}>
+                  {AUDIT_AREAS.map(a=><option key={a}>{a}</option>)}
+                </select>
+              : <input value={form.custom_area} onChange={e=>set("custom_area",e.target.value)} placeholder="Enter audit area name..." style={inputStyle}/>
+            }
+          </div>
+
+          {/* Audit details */}
+          <div>
+            <div style={{ fontSize:12,fontWeight:700,color:"#1a2332",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5 }}>Audit Details</div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+              <div>
+                <label style={labelStyle}>Audit Type</label>
+                <select value={form.audit_type} onChange={e=>set("audit_type",e.target.value)} style={inputStyle}>
+                  {AUDIT_TYPES.map(t=><option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Month</label>
+                <select value={form.month} onChange={e=>set("month",Number(e.target.value))} style={inputStyle}>
+                  {MONTHS.map((m,i)=><option key={m} value={i+1}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Lead Auditor</label>
+                <input value={form.lead_auditor} onChange={e=>set("lead_auditor",e.target.value)} placeholder="Name" style={inputStyle}/>
+              </div>
+              <div>
+                <label style={labelStyle}>Planned Date</label>
+                <input type="date" value={form.planned_date} onChange={e=>set("planned_date",e.target.value)} style={inputStyle}/>
+              </div>
+              <div>
+                <label style={labelStyle}>Opening Brief</label>
+                <input value={form.opening_brief} onChange={e=>set("opening_brief",e.target.value)} placeholder="e.g. 09:00" style={inputStyle}/>
+              </div>
+              <div>
+                <label style={labelStyle}>Closing Brief</label>
+                <input value={form.closing_brief} onChange={e=>set("closing_brief",e.target.value)} placeholder="e.g. 12:00" style={inputStyle}/>
+              </div>
+              <div style={{ gridColumn:"1/-1" }}>
+                <label style={labelStyle}>Audit Criteria</label>
+                <input value={form.audit_criteria} onChange={e=>set("audit_criteria",e.target.value)} style={inputStyle}/>
+              </div>
+              <div style={{ gridColumn:"1/-1" }}>
+                <label style={labelStyle}>Scope / Notes</label>
+                <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="Describe the scope of this ad-hoc audit..." style={{...inputStyle,resize:"vertical"}}/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",padding:"16px 24px",borderTop:"1px solid #eef2f7",background:"#fafbfc",flexShrink:0 }}>
+          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={handleSave} disabled={saving} style={{ background:"linear-gradient(135deg,#e65100,#f57f17)",border:"none" }}>
+            {saving?"Adding...":"＋ Add Ad-Hoc Audit"}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => {
   const isQM    = ["admin","quality_manager"].includes(profile?.role);
   const isAdmin = profile?.role==="admin";
@@ -3417,6 +3591,7 @@ const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => 
   const [pwModal,   setPwModal]   = useState(false);    // password gate
   const [approvalModal, setApprovalModal] = useState(false); // approval fields before generate
   const [approval,  setApproval]  = useState({ qm_name:"", qm_date:"", am_name:"", am_date:"" });
+  const [adHocModal, setAdHocModal] = useState(false); // ad-hoc audit creator
 
   const schedule = data.auditSchedule||[];
 
@@ -3483,6 +3658,7 @@ const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => 
   // Programme completion stats
   const totalSlots  = AUDIT_AREAS.length * 2;
   const yearSlots   = schedule.filter(s=>s.year===year);
+  const adHocSlots  = yearSlots.filter(s=>s.ad_hoc);
   const completed   = yearSlots.filter(s=>s.status==="Completed").length;
   const overdue     = yearSlots.filter(s=>s.status==="Overdue"||(!["Completed","Cancelled"].includes(s.status)&&s.planned_date&&new Date(s.planned_date)<new Date())).length;
   const pct         = totalSlots>0 ? Math.round(completed/totalSlots*100) : 0;
@@ -3515,6 +3691,11 @@ const AuditsView = ({ data, user, profile, managers, onRefresh, showToast }) => 
           {isQM && hasSchedule && (
             <Btn variant="ghost" onClick={()=>generateSchedulePDF(yearSlots, year, yearSlots[0]||{})}>
               📥 Export Schedule PDF
+            </Btn>
+          )}
+          {isQM && (
+            <Btn variant="ghost" onClick={()=>setAdHocModal(true)}>
+              ＋ Ad-Hoc Audit
             </Btn>
           )}
           {isQM && (
@@ -3621,6 +3802,51 @@ Planned: ${slot.planned_date||"Not set"}`}
                 })}
               </tbody>
             </table>
+
+            {/* Ad-hoc audits section below the main grid */}
+            {adHocSlots.length > 0 && (
+              <div style={{ marginTop:0,borderTop:"2px dashed #ffcc80" }}>
+                <div style={{ background:"#fff3e0",padding:"8px 16px",display:"flex",alignItems:"center",gap:8 }}>
+                  <span style={{ background:"#e65100",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:6 }}>AD-HOC</span>
+                  <span style={{ fontSize:12,fontWeight:700,color:"#e65100" }}>Unscheduled / Trigger-Based Audits ({adHocSlots.length})</span>
+                </div>
+                <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                  <tbody>
+                    {adHocSlots.map((s,i)=>{
+                      const c = slotColor(s);
+                      return (
+                        <tr key={s.id} style={{ borderBottom:"1px solid #fff3e0",background:i%2===0?"#fffdf8":"#fff8ee" }}>
+                          <td style={{ padding:"10px 16px",fontSize:13,fontWeight:600,color:"#bf360c",minWidth:220 }}>
+                            <div>{s.area}</div>
+                            {s.trigger && <div style={{ fontSize:10,color:"#e65100",marginTop:2 }}>⚡ {s.trigger}</div>}
+                          </td>
+                          {MONTHS.map((_,mi)=>{
+                            const monthNum = mi+1;
+                            if(s.month !== monthNum) return <td key={mi} style={{ padding:"8px 4px",textAlign:"center" }}><div style={{ width:8,height:8,borderRadius:"50%",background:"#fbe9e7",margin:"0 auto" }}/></td>;
+                            return (
+                              <td key={mi} style={{ padding:"4px",textAlign:"center" }}>
+                                <div
+                                  onClick={()=>isQM&&setModal(s)}
+                                  title={s.area+" (Ad-Hoc)\nTrigger: "+(s.trigger||"—")+"\nStatus: "+(s.status||"Scheduled")+"\nLead: "+(s.lead_auditor||"Not assigned")+"\nPlanned: "+(s.planned_date||"Not set")}
+                                  style={{ width:28,height:28,borderRadius:6,background:c.bg,border:"2px dashed "+c.border,margin:"0 auto",cursor:isQM?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:c.text,transition:"transform 0.15s" }}
+                                  onMouseEnter={e=>{if(isQM)e.currentTarget.style.transform="scale(1.2)";}}
+                                  onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";}}
+                                >
+                                  {s.status==="Completed"?"✓":"⚡"}
+                                </div>
+                              </td>
+                            );
+                          })}
+                          <td style={{ padding:"8px 16px",textAlign:"center" }}>
+                            <span style={{ fontSize:11,fontWeight:700,color:c.text,background:c.bg,border:"1px solid "+c.border,padding:"3px 10px",borderRadius:12 }}>{s.status||"Scheduled"}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           )}
         </div>
       )}
@@ -3644,7 +3870,7 @@ Planned: ${slot.planned_date||"Not set"}`}
                   return (
                     <tr key={s.id} style={{ borderBottom:"1px solid #eef2f7",background:i%2===0?"#fff":"#fafbfc" }}>
                       <td style={{ padding:"10px 14px",fontSize:13,fontWeight:600,color:T.primaryDk }}>{s.area}</td>
-                      <td style={{ padding:"10px 14px",fontSize:12,color:T.muted }}>#{s.slot}</td>
+                      <td style={{ padding:"10px 14px",fontSize:12,color:T.muted }}>{s.ad_hoc?<span style={{ background:"#fff3e0",color:"#e65100",fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:6,border:"1px solid #ffcc80" }}>AD-HOC</span>:<span>#{s.slot}</span>}</td>
                       <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{MONTHS[(s.month||1)-1]}</td>
                       <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.audit_type||"Internal"}</td>
                       <td style={{ padding:"10px 14px",fontSize:12,color:T.text }}>{s.lead_auditor||"—"}</td>
@@ -3683,6 +3909,20 @@ Planned: ${slot.planned_date||"Not set"}`}
         </div>
       )}
 
+      {adHocModal&&(
+        <AdHocAuditModal
+          year={year}
+          existingSlots={schedule}
+          onSave={async(slot)=>{
+            const { error } = await supabase.from("audit_schedule").upsert(slot, { onConflict:"id" });
+            if(error){ showToast("Error: "+error.message,"error"); return; }
+            showToast("Ad-hoc audit added to schedule","success");
+            setAdHocModal(false);
+            onRefresh();
+          }}
+          onClose={()=>setAdHocModal(false)}
+        />
+      )}
       {modal&&<AuditScheduleModal slot={modal} onSave={saveSlot} onClose={()=>setModal(null)} managers={managers}/>}
 
       {/* Password Gate Modal */}
